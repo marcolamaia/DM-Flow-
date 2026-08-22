@@ -187,3 +187,13 @@ export function checkQuota(limit: number | null, current: number, increment = 1)
   const allowed = current + increment <= limit;
   return { metric: '', limit, current, allowed, remaining: Math.max(0, limit - current) };
 }
+
+export const CUSTOM_FIELD_TYPES = [
+  'TEXT',
+  'NUMBER',
+  'BOOLEAN',
+  'DATE',
+  'DATETIME',
+  'SELECT',
+] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];

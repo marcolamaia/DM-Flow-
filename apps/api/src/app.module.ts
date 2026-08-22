@@ -9,11 +9,15 @@ import { ContactsModule } from './contacts/contacts.module';
 import { CapabilityModule } from './capabilities/capability.module';
 import { ProvidersModule } from './providers/providers.module';
 import { ChannelsModule } from './channels/channels.module';
+import { AutomationsModule } from './automations/automations.module';
+import { EngineModule } from './engine/engine.module';
+import { IngestionModule } from './ingestion/ingestion.module';
+import { ExecutionsModule } from './executions/executions.module';
 import { HealthController } from './health/health.controller';
 import { CorrelationMiddleware } from './common/correlation.middleware';
 
 @Module({
-  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule],
+  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {
