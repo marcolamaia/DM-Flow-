@@ -1,89 +1,120 @@
-# DM FLOW — Master Prompt
+# DM FLOW
 
-Este repositório **não contém a plataforma DM FLOW**. Ele contém a pesquisa e o **Master Prompt**
-que será entregue a uma IA de desenvolvimento para que ela construa a DM FLOW.
+Plataforma SaaS multi-tenant de automação de conversas para Instagram. Transforma
+comentário, story reply e menção em conversa privada automatizada, e guarda cada
+pessoa tocada como contato segmentável do negócio.
 
-## O que tem aqui
+Cobrança por assinatura via Stripe, com plano gratuito limitado e **suspensão
+automática por inadimplência** que para as automações sem apagar nada.
 
-| Arquivo | O que é |
+---
+
+## ⚠️ Leia antes de conectar uma conta real
+
+**Nenhuma capacidade do Instagram foi validada contra a documentação oficial da
+Meta.** O ambiente onde a plataforma foi construída teve `developers.facebook.com`
+bloqueado. Em vez de preencher endpoints e permissões com valores plausíveis, o
+projeto deixou tudo marcado como não confirmado e **impede** o uso em conta real:
+
+- `LiveInstagramProvider` recusa toda chamada com `CapabilityNotValidatedError`.
+- O Capability Engine nega qualquer capacidade não validada, sem flag de override.
+- Testes automatizados falham se alguém marcar algo como disponível sem validar.
+
+A plataforma inteira funciona hoje através de um **provider simulado** que reproduz
+a forma de uma integração real — webhooks assinados, OAuth com tela de consentimento,
+rate limiting por conta, ids de entrega, falhas realistas — sem inventar nada sobre
+a Meta. Capacidades servidas pelo simulador são marcadas `SANDBOX_SIMULATED`, o que
+descreve **o nosso código**, não o que a plataforma real permite.
+
+Para habilitar conta real: execute a FASE 0 do `MASTER_PROMPT.pt-BR.md` (§4),
+preencha `docs/meta-capabilities.md` e implemente `LiveInstagramProvider`.
+Nada mais no código precisa mudar — o motor só conhece a interface.
+
+---
+
+## Rodando
+
+Requisitos: Node 22+, pnpm 10+, Docker (ou Postgres 16 e Redis 7 locais).
+
+```bash
+pnpm install
+
+docker compose up -d              # Postgres + Redis
+cp .env.example .env
+# gere os segredos:
+sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$(openssl rand -hex 32)|" .env
+sed -i "s|^ENCRYPTION_KEY=.*|ENCRYPTION_KEY=$(openssl rand -hex 32)|" .env
+
+pnpm --filter @dmflow/shared build
+pnpm db:generate && pnpm --filter @dmflow/db deploy
+pnpm db:seed
+```
+
+Em três terminais:
+
+```bash
+pnpm dev:api       # http://localhost:4000
+pnpm dev:worker    # filas + scheduler
+pnpm dev:web       # http://localhost:3000
+```
+
+Entre com as credenciais que o seed imprime (`demo@dmflow.app`), e dispare um
+evento simulado:
+
+```bash
+pnpm --filter @dmflow/api simulate:comment "quero o link"
+pnpm --filter @dmflow/api simulate:dm "qual o preço?"
+pnpm --filter @dmflow/api simulate:story "amei isso"
+```
+
+O comentário casa o gatilho da automação semeada, roda o fluxo, envia a resposta
+privada, aplica a tag e grava o score. Veja em **Automações → execuções**, em
+**Conversas** e em **Relatórios**.
+
+## Testes
+
+```bash
+pnpm test          # 73 testes + paridade de i18n
+```
+
+Os testes de integração rodam contra Postgres e Redis reais, não mocks: isolamento
+de tenant, idempotência e rejeição de assinatura são exatamente as coisas sobre as
+quais um mock mentiria com prazer.
+
+## Estrutura
+
+```
+apps/api        NestJS — HTTP, webhooks, WebSocket, worker, scheduler
+apps/web        Next.js — interface, Flow Builder (React Flow)
+packages/shared domínio: erros, RBAC, planos, capacidades, predicados, grafo
+packages/db     Prisma — 34 tabelas, migrations
+docs/           arquitetura, segurança, limitações, registro de capacidades
+```
+
+## Documentação
+
+| Arquivo | Conteúdo |
 |---|---|
-| **`MASTER_PROMPT.pt-BR.md`** | 🇧🇷 O entregável principal, em português. Copie e cole numa IA de programação. |
-| **`MASTER_PROMPT.en.md`** | 🇺🇸 O mesmo entregável, em inglês. As duas versões são normativas e equivalentes. |
-| `research/00-research-log.md` | Método, **limitações desta pesquisa**, e a escala de nível de evidência. **Leia primeiro.** |
-| `research/01-manychat-product-model.md` | Frente 1 — decomposição do modelo mental do Manychat |
-| `research/02-meta-capability-hypotheses.md` | Frente 2 — hipóteses sobre a Meta + URLs canônicas a validar |
-| `research/03-matrix.md` | Matriz Manychat × capacidade real da Meta |
-| `research/04-stack-decision.md` | Stack escolhida e justificada |
+| `docs/architecture.md` | Topologia, caminho de um evento, decisões e o porquê |
+| `docs/meta-capabilities.md` | **Registro de validação — hoje vazio de propósito** |
+| `docs/known-limitations.md` | O que o produto não faz e por quê |
+| `docs/security.md` | Controles implementados e endurecimento pendente |
+| `MASTER_PROMPT.pt-BR.md` | Especificação completa (também em inglês) |
+| `research/` | Pesquisa Manychat × Meta que originou o projeto |
 
-## ⚠️ Limitação que você precisa conhecer
+## Billing
 
-A sessão de pesquisa que gerou este material rodou atrás de um proxy de egress que **bloqueou
-`developers.facebook.com`, `manychat.com` e `help.manychat.com`**. Foi impossível ler a
-documentação oficial da Meta página por página.
+Sem `STRIPE_SECRET_KEY` a plataforma roda completa: planos e quotas são aplicados,
+o checkout aplica o plano localmente e diz claramente que nada foi cobrado. Uma
+instalação self-hosted ou pré-lançamento não deve ficar inutilizável por falta de
+uma chave.
 
-Por isso:
+Com Stripe configurado: falha de pagamento move o workspace para `PAST_DUE` e inicia
+a carência (`BILLING_GRACE_DAYS`, padrão 7). Passada a carência, o sweep agendado
+**suspende** o workspace — automações param numa ação deliberada, e leitura,
+exportação e pagamento continuam abertos. Pagamento confirmado reativa
+automaticamente.
 
-- **Nenhuma capacidade da Meta neste repositório é fato confirmado.** Todas são hipóteses
-  rotuladas e endereçadas à FASE 0 do Master Prompt.
-- O Master Prompt foi desenhado exatamente para essa realidade: a **primeira tarefa obrigatória**
-  da IA construtora é validar tudo contra a documentação oficial ao vivo, e o produto é
-  arquitetado com um **Capability Engine deny-by-default**, no qual uma capacidade não validada é
-  estruturalmente indisponível — não "disponível e tomara que funcione".
-
-Para eliminar a limitação: libere `developers.facebook.com`, `developers.meta.com` e
-`help.manychat.com` na network policy do Environment e re-rode a FASE 0.
-
-## Como usar
-
-1. Escolha o idioma (`MASTER_PROMPT.pt-BR.md` ou `MASTER_PROMPT.en.md`).
-2. Cole o arquivo inteiro numa IA de desenvolvimento (Claude Code, Codex ou equivalente).
-3. Exija que ela execute a **FASE 0** e volte com o relatório de validação **antes** de escrever
-   código de integração.
-4. Só depois disso, autorize a FASE 1.
-
-## Fontes usadas na pesquisa
-
-Prioridade declarada: Meta for Developers → Manychat oficial → documentação oficial de outras
-tecnologias. As páginas da Meta e do Manychat abaixo foram **identificadas como existentes**
-via índice de busca, mas **não puderam ser abertas** nesta sessão (ver limitação acima).
-
-### Meta for Developers — a validar na FASE 0
-- https://developers.facebook.com/docs/instagram-platform
-- https://developers.facebook.com/docs/instagram-platform/overview/
-- https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api/
-- https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/conversations-api/
-- https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/messaging-api/ice-breakers/
-- https://developers.facebook.com/docs/instagram-platform/webhooks
-- https://developers.facebook.com/docs/messenger-platform/instagram/features/private-replies/
-- https://developers.facebook.com/docs/messenger-platform/instagram/features/story-mention/
-- https://developers.facebook.com/docs/messenger-platform/instagram/features/ice-breakers/
-- https://developers.facebook.com/docs/messenger-platform/conversations/
-- https://developers.facebook.com/docs/graph-api/webhooks/reference/instagram
-- https://developers.facebook.com/docs/graph-api/webhooks/getting-started/webhooks-for-instagram/
-- https://developers.facebook.com/docs/graph-api/overview/rate-limiting/
-- https://developers.facebook.com/docs/instagram-api/changelog/
-- https://developers.facebook.com/documentation/business-messaging/messenger-platform/policy
-- https://developers.facebook.com/documentation/instagram-platform/webhooks
-- https://developers.facebook.com/documentation/business-messaging/instagram-messaging/webhooks
-
-### Manychat oficial — referência de produto (Frente 1)
-- https://help.manychat.com/hc/en-us/articles/14281166306332-How-to-build-a-Manychat-automation
-- https://help.manychat.com/hc/en-us/articles/14281170185628-How-to-set-custom-rules-with-Triggers-Conditions-and-Actions
-- https://help.manychat.com/hc/en-us/articles/14281197046812-Smart-Delay
-- https://help.manychat.com/hc/en-us/articles/14281142518556-Condition-Block
-- https://help.manychat.com/hc/en-us/articles/14281110746012-Contacts-tab-Overview
-- https://help.manychat.com/hc/en-us/articles/14281316989724-Instagram-Post-and-Reel-Comments-trigger
-- https://help.manychat.com/hc/en-us/articles/13556930006428-Instagram-Story-Reply-Trigger
-- https://help.manychat.com/hc/en-us/articles/14281309502108-Instagram-Story-Mention-Reply-trigger
-- https://help.manychat.com/hc/en-us/articles/14281172274460-User-roles-and-team-management
-- https://help.manychat.com/hc/en-us/articles/14281071969820-Manychat-Inbox-overview
-- https://help.manychat.com/hc/en-us/articles/14281089062044-Live-Chat-analytics
-- https://help.manychat.com/hc/en-us/articles/14281285374364-Dev-Tools-External-request
-- https://help.manychat.com/hc/en-us/articles/14281199732892-How-to-send-messages-outside-the-24-hour-and-7-day-windows-in-Messenger-and-Instagram
-- https://api.manychat.com/swagger
-
-### Fontes secundárias encontradas — NÃO usadas como base técnica
-Blogs de vendors e agregadores apareceram nas buscas e foram **descartados como fundamento**,
-por divergirem entre si em números críticos (ver `research/00-research-log.md` §3). Estão
-registrados na pesquisa apenas como evidência de que os números circulantes são conflitantes e
-precisam de validação primária.
+```bash
+pnpm --filter @dmflow/api billing:check   # demonstra o ciclo completo
+```
