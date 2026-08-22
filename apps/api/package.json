@@ -10,7 +10,11 @@
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "start:dev": "node -r @swc-node/register src/main.ts"
+    "start:dev": "node -r @swc-node/register src/main.ts",
+    "simulate:comment": "node -r @swc-node/register scripts/simulate-event.ts comment",
+    "simulate:dm": "node -r @swc-node/register scripts/simulate-event.ts dm",
+    "simulate:story": "node -r @swc-node/register scripts/simulate-event.ts story_reply",
+    "billing:check": "node -r @swc-node/register scripts/billing-lifecycle-check.ts"
   },
   "dependencies": {
     "@dmflow/db": "workspace:*",
@@ -48,6 +52,7 @@
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
+    "unplugin-swc": "^1.5.11",
     "vitest": "^2.1.8"
   }
 }

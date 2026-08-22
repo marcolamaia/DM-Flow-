@@ -17,10 +17,11 @@
     "db:push": "pnpm --filter @dmflow/db push",
     "db:seed": "pnpm --filter @dmflow/db seed",
     "db:studio": "pnpm --filter @dmflow/db studio",
-    "test": "pnpm -r test",
+    "test": "pnpm --filter @dmflow/shared test && pnpm --filter @dmflow/api test && node scripts/check-i18n-parity.mjs",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "check:i18n": "node scripts/check-i18n-parity.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
