@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch src/main.ts",
-    "dev:worker": "tsx watch src/worker.ts",
+    "dev": "nodemon --watch src --ext ts --exec \"node -r @swc-node/register src/main.ts\"",
+    "dev:worker": "nodemon --watch src --ext ts --exec \"node -r @swc-node/register src/worker.ts\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/main.js",
     "start:worker": "node dist/worker.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start:dev": "node -r @swc-node/register src/main.ts"
   },
   "dependencies": {
     "@dmflow/db": "workspace:*",
@@ -36,11 +37,14 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.1",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/luxon": "^3.4.2",
     "@types/node": "^22.10.0",
     "@types/supertest": "^6.0.2",
+    "nodemon": "^3.1.14",
     "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
