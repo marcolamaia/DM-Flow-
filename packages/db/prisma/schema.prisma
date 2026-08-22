@@ -1,0 +1,925 @@
+// DM FLOW — data model
+// Tenancy boundary is Workspace. Every tenant-scoped table carries workspaceId.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum WorkspaceStatus {
+  ACTIVE
+  PAST_DUE // payment failed, grace period, still functional
+  SUSPENDED // automations halted until payment is regularised
+  CANCELED
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  EDITOR
+  AGENT
+  VIEWER
+}
+
+enum Channel {
+  INSTAGRAM
+  MESSENGER
+  WHATSAPP
+}
+
+enum ConnectedAccountStatus {
+  CONNECTED
+  AUTHORIZATION_INCOMPLETE
+  MISSING_PERMISSION
+  PENDING_APP_REVIEW
+  TOKEN_EXPIRING
+  TOKEN_INVALID
+  WEBHOOK_UNHEALTHY
+  RATE_LIMITED
+  PROVIDER_ERROR
+  DISCONNECTED
+  ACCOUNT_RESTRICTED
+}
+
+enum ContactStatus {
+  ACTIVE
+  UNSUBSCRIBED
+  BLOCKED
+}
+
+enum ConversationStatus {
+  OPEN
+  SNOOZED
+  CLOSED
+}
+
+enum WindowState {
+  OPEN
+  EXTENDED
+  CLOSED
+  UNKNOWN
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum SenderType {
+  CONTACT
+  AUTOMATION
+  AGENT
+  SYSTEM
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum AutomationStatus {
+  DRAFT
+  PUBLISHED
+  PAUSED
+  ARCHIVED
+}
+
+enum ExecutionStatus {
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum StepStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum WebhookEventStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DISCARDED
+}
+
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  DATE
+  DATETIME
+  SELECT
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+  INCOMPLETE_EXPIRED
+  UNPAID
+  PAUSED
+}
+
+enum ActorType {
+  USER
+  SYSTEM
+  AUTOMATION
+}
+
+enum DataSubjectRequestType {
+  EXPORT
+  ERASURE
+}
+
+enum DataSubjectRequestStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// ─────────────────────────────────────────────────────────────
+// Identity & tenancy
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id              String    @id
+  email           String    @unique
+  passwordHash    String
+  name            String
+  avatarUrl       String?
+  locale          String    @default("pt-BR")
+  totpSecretEnc   String?
+  totpEnabledAt   DateTime?
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  memberships   WorkspaceMember[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  assignedConvs Conversation[]    @relation("ConversationAssignee")
+  notes         ConversationNote[]
+  passwordResets PasswordResetToken[]
+
+  @@index([email])
+}
+
+model Session {
+  id               String    @id
+  userId           String
+  refreshTokenHash String    @unique
+  userAgent        String?
+  ip               String?
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Workspace {
+  id        String          @id
+  name      String
+  slug      String          @unique
+  timezone  String          @default("America/Sao_Paulo")
+  locale    String          @default("pt-BR")
+  status    WorkspaceStatus @default(ACTIVE)
+  // Set when the workspace is suspended for non-payment so the UI can explain it
+  suspendedAt     DateTime?
+  suspensionReason String?
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  deletedAt DateTime?
+
+  members           WorkspaceMember[]
+  invitations       Invitation[]
+  connectedAccounts ConnectedAccount[]
+  contacts          Contact[]
+  contactIdentities ContactIdentity[]
+  conversations     Conversation[]
+  messages          Message[]
+  notes             ConversationNote[]
+  tags              Tag[]
+  customFields      CustomField[]
+  customFieldValues CustomFieldValue[]
+  segments          Segment[]
+  automations       Automation[]
+  automationVersions AutomationVersion[]
+  triggers          Trigger[]
+  executions        Execution[]
+  executionSteps    ExecutionStep[]
+  idempotencyRecords IdempotencyRecord[]
+  webhookEvents     WebhookEvent[]
+  outboundWebhooks  OutboundWebhook[]
+  outboundDeliveries OutboundWebhookDelivery[]
+  templates         AutomationTemplate[]
+  auditLogs         AuditLog[]
+  apiKeys           ApiKey[]
+  subscription      Subscription?
+  usageCounters     UsageCounter[]
+  dataSubjectRequests DataSubjectRequest[]
+  paymentEvents     StripeEvent[]
+
+  @@index([status])
+}
+
+model WorkspaceMember {
+  id          String     @id
+  workspaceId String
+  userId      String
+  role        MemberRole
+  invitedById String?
+  joinedAt    DateTime   @default(now())
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id          String     @id
+  workspaceId String
+  email       String
+  role        MemberRole
+  tokenHash   String     @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, email])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Billing
+// ─────────────────────────────────────────────────────────────
+
+model Plan {
+  id            String   @id
+  code          String   @unique // free | starter | pro | business
+  name          String
+  description   String?
+  priceCents    Int      @default(0)
+  currency      String   @default("BRL")
+  interval      String   @default("month")
+  stripeProductId String?
+  stripePriceId String?
+  // Feature/quota limits, e.g. { contacts: 500, automations: 2, connectedAccounts: 1, ... }
+  limits        Json
+  features      String[] @default([])
+  sortOrder     Int      @default(0)
+  isPublic      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                   String             @id
+  workspaceId          String             @unique
+  planId               String
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  canceledAt           DateTime?
+  trialEndsAt          DateTime?
+  // Populated from Stripe when a payment fails, so we can tell the user what to fix
+  lastPaymentError     String?
+  pastDueSince         DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan      @relation(fields: [planId], references: [id])
+
+  @@index([status])
+  @@index([planId])
+}
+
+// Idempotency + audit for Stripe webhooks
+model StripeEvent {
+  id          String    @id // Stripe event id
+  workspaceId String?
+  type        String
+  payload     Json
+  processedAt DateTime?
+  error       String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([processedAt])
+}
+
+// Rolling usage counters used to enforce plan quotas
+model UsageCounter {
+  id          String   @id
+  workspaceId String
+  metric      String // messages_sent | executions_started | ...
+  period      String // YYYY-MM
+  value       Int      @default(0)
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, metric, period])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Channel connection
+// ─────────────────────────────────────────────────────────────
+
+model ConnectedAccount {
+  id                String                 @id
+  workspaceId       String
+  channel           Channel
+  externalAccountId String
+  username          String
+  displayName       String?
+  avatarUrl         String?
+  accountType       String? // BUSINESS | CREATOR | UNKNOWN
+  grantedScopes     String[]               @default([])
+  accessTokenEnc    String?
+  refreshTokenEnc   String?
+  tokenExpiresAt    DateTime?
+  status            ConnectedAccountStatus @default(AUTHORIZATION_INCOMPLETE)
+  statusDetail      String?
+  lastHealthCheckAt DateTime?
+  lastErrorCode     String?
+  webhookFields     String[]               @default([])
+  webhookVerifiedAt DateTime?
+  // Whether this account is served by the mock provider (no real Meta calls)
+  isSandbox         Boolean                @default(true)
+  connectedByUserId String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  deletedAt         DateTime?
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  identities    ContactIdentity[]
+  conversations Conversation[]
+  triggers      Trigger[]
+
+  @@unique([channel, externalAccountId])
+  @@index([workspaceId, channel])
+  @@index([status])
+}
+
+// ─────────────────────────────────────────────────────────────
+// People & conversations
+// ─────────────────────────────────────────────────────────────
+
+model Contact {
+  id                String        @id
+  workspaceId       String
+  primaryChannel    Channel
+  displayName       String?
+  username          String?
+  avatarUrl         String?
+  locale            String?
+  timezone          String?
+  status            ContactStatus @default(ACTIVE)
+  source            String? // trigger type or manual/import
+  consentState      String? // GRANTED | DENIED | UNKNOWN
+  consentUpdatedAt  DateTime?
+  firstSeenAt       DateTime      @default(now())
+  lastInteractionAt DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  workspace     Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  identities    ContactIdentity[]
+  conversations Conversation[]
+  tags          ContactTag[]
+  fieldValues   CustomFieldValue[]
+  executions    Execution[]
+  dsrs          DataSubjectRequest[]
+
+  @@index([workspaceId, lastInteractionAt(sort: Desc)])
+  @@index([workspaceId, status])
+  @@index([workspaceId, createdAt(sort: Desc)])
+}
+
+model ContactIdentity {
+  id                 String   @id
+  workspaceId        String
+  contactId          String
+  channel            Channel
+  connectedAccountId String
+  externalUserId     String
+  username           String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact          Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([channel, connectedAccountId, externalUserId])
+  @@index([workspaceId, contactId])
+}
+
+model Conversation {
+  id                     String             @id
+  workspaceId            String
+  contactId              String
+  connectedAccountId     String
+  channel                Channel
+  externalConversationId String?
+  status                 ConversationStatus @default(OPEN)
+  assigneeId             String?
+  lastInboundAt          DateTime?
+  lastOutboundAt         DateTime?
+  windowState            WindowState        @default(UNKNOWN)
+  windowExpiresAt        DateTime?
+  windowBasis            String?
+  unreadCount            Int                @default(0)
+  snoozedUntil           DateTime?
+  // Set while a human agent takes over; the engine will not send on this conversation
+  automationPausedAt     DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact          Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  connectedAccount ConnectedAccount   @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+  assignee         User?              @relation("ConversationAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  messages         Message[]
+  notes            ConversationNote[]
+  executions       Execution[]
+
+  @@unique([connectedAccountId, contactId])
+  @@index([workspaceId, status, assigneeId])
+  @@index([workspaceId, lastInboundAt(sort: Desc)])
+}
+
+model Message {
+  id                String           @id
+  workspaceId       String
+  conversationId    String
+  direction         MessageDirection
+  externalMessageId String?
+  senderType        SenderType
+  senderUserId      String?
+  contentType       String           @default("text")
+  content           Json
+  attachments       Json?
+  status            MessageStatus    @default(SENT)
+  failureCode       String?
+  failureDetail     Json?
+  executionId       String?
+  sentAt            DateTime?
+  createdAt         DateTime         @default(now())
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, externalMessageId])
+  @@index([conversationId, createdAt(sort: Desc)])
+  @@index([workspaceId, direction, createdAt(sort: Desc)])
+}
+
+model ConversationNote {
+  id             String   @id
+  workspaceId    String
+  conversationId String
+  authorUserId   String
+  body           String
+  createdAt      DateTime @default(now())
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  author       User         @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt(sort: Desc)])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Segmentation
+// ─────────────────────────────────────────────────────────────
+
+model Tag {
+  id          String   @id
+  workspaceId String
+  name        String
+  color       String   @default("#6366f1")
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contacts  ContactTag[]
+
+  @@unique([workspaceId, name])
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  appliedAt DateTime @default(now())
+  appliedBy Json? // { type: 'USER'|'AUTOMATION', id }
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+model CustomField {
+  id          String          @id
+  workspaceId String
+  key         String
+  label       String
+  type        CustomFieldType
+  options     Json?
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  values    CustomFieldValue[]
+
+  @@unique([workspaceId, key])
+}
+
+model CustomFieldValue {
+  id            String   @id
+  workspaceId   String
+  contactId     String
+  customFieldId String
+  value         Json
+  updatedAt     DateTime @updatedAt
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact     Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customField CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, customFieldId])
+  @@index([workspaceId, customFieldId])
+}
+
+model Segment {
+  id          String   @id
+  workspaceId String
+  name        String
+  description String?
+  filter      Json // predicate AST
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, name])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Automation
+// ─────────────────────────────────────────────────────────────
+
+model Automation {
+  id                 String           @id
+  workspaceId        String
+  name               String
+  description        String?
+  status             AutomationStatus @default(DRAFT)
+  publishedVersionId String?          @unique
+  draftVersionId     String?          @unique
+  createdById        String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  deletedAt          DateTime?
+
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  versions         AutomationVersion[] @relation("AutomationVersions")
+  publishedVersion AutomationVersion?  @relation("PublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  draftVersion     AutomationVersion?  @relation("DraftVersion", fields: [draftVersionId], references: [id], onDelete: SetNull)
+  triggers         Trigger[]
+  executions       Execution[]
+
+  @@index([workspaceId, status])
+}
+
+model AutomationVersion {
+  id               String    @id
+  workspaceId      String
+  automationId     String
+  versionNumber    Int
+  graph            Json // { nodes: [], edges: [] } — our own versioned schema
+  schemaVersion    Int       @default(1)
+  validationReport Json?
+  changelog        String?
+  publishedAt      DateTime?
+  publishedById    String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation Automation @relation("AutomationVersions", fields: [automationId], references: [id], onDelete: Cascade)
+
+  publishedFor Automation? @relation("PublishedVersion")
+  draftFor     Automation? @relation("DraftVersion")
+  triggers     Trigger[]
+  executions   Execution[]
+
+  @@unique([automationId, versionNumber])
+  @@index([workspaceId, automationId])
+}
+
+model Trigger {
+  id                  String   @id
+  workspaceId         String
+  automationId        String
+  automationVersionId String
+  type                String
+  channel             Channel?
+  connectedAccountId  String?
+  config              Json     @default("{}")
+  matchPriority       Int      @default(0)
+  enabled             Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation        Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  automationVersion AutomationVersion @relation(fields: [automationVersionId], references: [id], onDelete: Cascade)
+  connectedAccount  ConnectedAccount? @relation(fields: [connectedAccountId], references: [id], onDelete: Cascade)
+  executions        Execution[]
+
+  @@index([workspaceId, type, enabled])
+  @@index([automationVersionId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Execution
+// ─────────────────────────────────────────────────────────────
+
+model Execution {
+  id                  String          @id
+  workspaceId         String
+  automationId        String
+  automationVersionId String
+  contactId           String
+  conversationId      String?
+  triggerId           String?
+  triggerEventId      String?
+  status              ExecutionStatus @default(RUNNING)
+  currentNodeId       String?
+  variables           Json            @default("{}")
+  resumeAt            DateTime?
+  stepCount           Int             @default(0)
+  attemptCount        Int             @default(0)
+  // Optimistic-lock token; incremented on every persisted engine transition
+  lockVersion         Int             @default(0)
+  lastError           Json?
+  startedAt           DateTime        @default(now())
+  finishedAt          DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  workspace         Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  automation        Automation        @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  automationVersion AutomationVersion @relation(fields: [automationVersionId], references: [id], onDelete: Cascade)
+  contact           Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversation      Conversation?     @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  trigger           Trigger?          @relation(fields: [triggerId], references: [id], onDelete: SetNull)
+  steps             ExecutionStep[]
+
+  @@index([workspaceId, automationId, startedAt(sort: Desc)])
+  @@index([status, resumeAt])
+  @@index([workspaceId, contactId])
+  @@index([automationId, status])
+}
+
+model ExecutionStep {
+  id          String     @id
+  workspaceId String
+  executionId String
+  nodeId      String
+  nodeType    String
+  sequence    Int
+  status      StepStatus
+  input       Json?
+  output      Json?
+  errorCode   String?
+  errorDetail Json?
+  startedAt   DateTime   @default(now())
+  finishedAt  DateTime?
+  durationMs  Int?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  execution Execution @relation(fields: [executionId], references: [id], onDelete: Cascade)
+
+  @@index([executionId, sequence])
+  @@index([workspaceId, nodeType, startedAt(sort: Desc)])
+}
+
+model IdempotencyRecord {
+  id          String    @id
+  workspaceId String
+  scope       String // e.g. 'private_reply' | 'execution_node'
+  key         String
+  resultRef   Json?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, scope, key])
+  @@index([expiresAt])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Events & integrations
+// ─────────────────────────────────────────────────────────────
+
+model WebhookEvent {
+  id              String             @id
+  workspaceId     String?
+  channel         Channel
+  providerEventId String
+  dedupeKey       String
+  rawPayload      Json
+  signatureValid  Boolean            @default(false)
+  status          WebhookEventStatus @default(RECEIVED)
+  discardReason   String?
+  attemptCount    Int                @default(0)
+  lastError       String?
+  receivedAt      DateTime           @default(now())
+  processedAt     DateTime?
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@unique([channel, providerEventId])
+  @@index([status, receivedAt])
+  @@index([workspaceId, receivedAt(sort: Desc)])
+}
+
+model OutboundWebhook {
+  id          String   @id
+  workspaceId String
+  name        String
+  url         String
+  secretEnc   String
+  events      String[] @default([])
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace  Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  deliveries OutboundWebhookDelivery[]
+
+  @@index([workspaceId, enabled])
+}
+
+model OutboundWebhookDelivery {
+  id                String    @id
+  workspaceId       String
+  outboundWebhookId String
+  eventType         String
+  payload           Json
+  responseStatus    Int?
+  responseBody      String?
+  attemptCount      Int       @default(0)
+  nextAttemptAt     DateTime?
+  status            String    @default("PENDING")
+  createdAt         DateTime  @default(now())
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  webhook   OutboundWebhook @relation(fields: [outboundWebhookId], references: [id], onDelete: Cascade)
+
+  @@index([outboundWebhookId, createdAt(sort: Desc)])
+}
+
+model AutomationTemplate {
+  id                   String   @id
+  workspaceId          String?
+  name                 String
+  description          String?
+  category             String?
+  graph                Json
+  requiredCapabilities String[] @default([])
+  declaredTags         String[] @default([])
+  declaredFields       Json?
+  visibility           String   @default("WORKSPACE") // WORKSPACE | GLOBAL
+  schemaVersion        Int      @default(1)
+  createdById          String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([visibility])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Governance
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id          String    @id
+  workspaceId String?
+  actorType   ActorType
+  actorUserId String?
+  action      String
+  entityType  String?
+  entityId    String?
+  before      Json?
+  after       Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  actor     User?      @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+}
+
+model ApiKey {
+  id          String    @id
+  workspaceId String
+  name        String
+  keyHash     String    @unique
+  prefix      String
+  scopes      String[]  @default([])
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdById String?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([prefix])
+}
+
+model DataSubjectRequest {
+  id          String                   @id
+  workspaceId String
+  contactId   String?
+  type        DataSubjectRequestType
+  status      DataSubjectRequestStatus @default(PENDING)
+  requestedById String?
+  artifactRef String?
+  error       String?
+  requestedAt DateTime                 @default(now())
+  completedAt DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+}
