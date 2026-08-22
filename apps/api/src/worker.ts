@@ -9,7 +9,13 @@ import { EngineService } from './engine/engine.service';
 import { IngestionService } from './ingestion/ingestion.service';
 import { PrismaService } from './prisma/prisma.service';
 import { BillingService } from './billing/billing.service';
-import { QUEUE_NAMES, type EngineJob, type IngestionJob } from './engine/queues';
+import { OutboundWebhooksService } from './integrations/outbound-webhooks.service';
+import {
+  QUEUE_NAMES,
+  type EngineJob,
+  type IngestionJob,
+  type OutboundWebhookJob,
+} from './engine/queues';
 import { uuidv7 } from '@dmflow/shared';
 
 /**
@@ -28,6 +34,7 @@ async function bootstrap(): Promise<void> {
   const ingestion = app.get(IngestionService);
   const prisma = app.get(PrismaService);
   const billing = app.get(BillingService);
+  const outbound = app.get(OutboundWebhooksService);
 
   const connection = redis.queueConnection;
 
@@ -46,9 +53,16 @@ async function bootstrap(): Promise<void> {
     { connection, concurrency: 8 },
   );
 
+  const outboundWorker = new Worker<OutboundWebhookJob>(
+    QUEUE_NAMES.outboundWebhook,
+    (job: Job<OutboundWebhookJob>) => withContext(() => outbound.deliver(job.data.deliveryId)),
+    { connection, concurrency: 4 },
+  );
+
   for (const [name, worker] of [
     ['ingestion', ingestionWorker],
     ['engine', engineWorker],
+    ['outbound-webhook', outboundWorker],
   ] as const) {
     worker.on('failed', (job, err) => {
       const exhausted = job ? job.attemptsMade >= (job.opts.attempts ?? 1) : false;
@@ -118,7 +132,11 @@ async function bootstrap(): Promise<void> {
     clearInterval(schedulerInterval);
     clearInterval(maintenanceInterval);
     // Closing the workers lets in-flight jobs finish instead of losing them.
-    await Promise.allSettled([ingestionWorker.close(), engineWorker.close()]);
+    await Promise.allSettled([
+      ingestionWorker.close(),
+      engineWorker.close(),
+      outboundWorker.close(),
+    ]);
     await app.close();
     process.exit(0);
   };

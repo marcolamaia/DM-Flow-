@@ -15,11 +15,12 @@ import { IngestionModule } from './ingestion/ingestion.module';
 import { ExecutionsModule } from './executions/executions.module';
 import { InboxModule } from './inbox/inbox.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { IntegrationsModule } from './integrations/integrations.module';
 import { HealthController } from './health/health.controller';
 import { CorrelationMiddleware } from './common/correlation.middleware';
 
 @Module({
-  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule],
+  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {
