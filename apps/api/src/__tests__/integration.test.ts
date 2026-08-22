@@ -6,6 +6,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import request from 'supertest';
+import type { Server } from 'node:http';
 import { AppModule } from '../app.module';
 import { DmFlowExceptionFilter } from '../common/exception.filter';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,7 +22,7 @@ import { CAP, PLAN_DEFINITIONS, uuidv7 } from '@dmflow/shared';
 let app: INestApplication;
 let prisma: PrismaService;
 let capabilities: CapabilityService;
-let server: unknown;
+let server: Server;
 
 const RAW_BODY_PREFIXES = ['/webhooks/', '/billing/stripe/webhook'];
 
@@ -52,7 +53,7 @@ beforeAll(async () => {
   app.useGlobalFilters(new DmFlowExceptionFilter());
 
   await app.init();
-  server = app.getHttpServer();
+  server = app.getHttpServer() as Server;
 
   prisma = app.get(PrismaService);
   capabilities = app.get(CapabilityService);
