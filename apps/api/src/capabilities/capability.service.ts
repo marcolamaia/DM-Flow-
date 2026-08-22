@@ -21,6 +21,11 @@ export interface CapabilityRequest {
   oneShotTarget?: string;
   /** The event that started this execution, for ORIGIN_EVENT capabilities. */
   originEventType?: string;
+  /**
+   * Who is acting. Handoff pauses AUTOMATION on a conversation — the whole point is
+   * that a human takes over, so an AGENT must still be able to reply there.
+   */
+  actor?: 'AUTOMATION' | 'AGENT';
   now?: Date;
 }
 
@@ -161,7 +166,8 @@ export class CapabilityService {
         return deny(capabilityId, 'ACCOUNT_DISCONNECTED');
       }
 
-      if (conversation.automationPausedAt) {
+      const actor = request.actor ?? 'AUTOMATION';
+      if (conversation.automationPausedAt && actor === 'AUTOMATION') {
         return deny(capabilityId, 'AUTOMATION_PAUSED');
       }
 
