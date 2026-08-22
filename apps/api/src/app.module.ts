@@ -6,11 +6,14 @@ import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { ContactsModule } from './contacts/contacts.module';
+import { CapabilityModule } from './capabilities/capability.module';
+import { ProvidersModule } from './providers/providers.module';
+import { ChannelsModule } from './channels/channels.module';
 import { HealthController } from './health/health.controller';
 import { CorrelationMiddleware } from './common/correlation.middleware';
 
 @Module({
-  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule],
+  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {
