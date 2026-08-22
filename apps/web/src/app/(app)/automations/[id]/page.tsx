@@ -9,15 +9,17 @@ import {
   Controls,
   MiniMap,
   addEdge,
+  ReactFlowProvider,
   useEdgesState,
   useNodesState,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowLeft, CheckCircle2, Rocket, TriangleAlert, Zap } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Redo2, Rocket, TriangleAlert, Undo2, Zap } from 'lucide-react';
 import { ApiError, del, get, post, put } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
@@ -102,7 +104,7 @@ function summarise(type: string, config: Record<string, unknown>, locale: string
   }
 }
 
-export default function BuilderPage() {
+function Builder() {
   const params = useParams<{ id: string }>();
   const automationId = params.id;
   const router = useRouter();
@@ -112,6 +114,45 @@ export default function BuilderPage() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const { screenToFlowPosition } = useReactFlow();
+
+  /**
+   * Undo history. Snapshots are pushed on discrete actions — adding, deleting,
+   * connecting, finishing a drag — rather than on every pointer move, so one
+   * Ctrl+Z undoes one thing the operator did instead of one frame of a drag.
+   */
+  const history = React.useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const future = React.useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  const [canUndo, setCanUndo] = React.useState(false);
+  const [canRedo, setCanRedo] = React.useState(false);
+
+  const snapshot = React.useCallback(() => {
+    history.current.push({ nodes: structuredClone(nodes), edges: structuredClone(edges) });
+    if (history.current.length > 50) history.current.shift();
+    future.current = [];
+    setCanUndo(true);
+    setCanRedo(false);
+  }, [nodes, edges]);
+
+  const undo = React.useCallback(() => {
+    const previous = history.current.pop();
+    if (!previous) return;
+    future.current.push({ nodes: structuredClone(nodes), edges: structuredClone(edges) });
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setCanUndo(history.current.length > 0);
+    setCanRedo(true);
+  }, [nodes, edges, setNodes, setEdges]);
+
+  const redo = React.useCallback(() => {
+    const next = future.current.pop();
+    if (!next) return;
+    history.current.push({ nodes: structuredClone(nodes), edges: structuredClone(edges) });
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setCanUndo(true);
+    setCanRedo(future.current.length > 0);
+  }, [nodes, edges, setNodes, setEdges]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [report, setReport] = React.useState<ValidationReport | null>(null);
   const [saveState, setSaveState] = React.useState<'idle' | 'saving' | 'saved'>('idle');
@@ -281,27 +322,57 @@ export default function BuilderPage() {
     );
   }, [report, locale, setNodes]);
 
-  const addNode = (type: string) => {
-    const id = `${type}-${Date.now().toString(36)}`;
-    const last = nodes.at(-1);
-    setNodes((current) => [
-      ...current,
-      {
-        id,
-        type: 'dmflow',
-        position: { x: last ? last.position.x : 260, y: last ? last.position.y + 150 : 220 },
-        data: {
-          nodeType: type,
-          label: nodeLabel(type, locale),
-          summary: '',
-          handles: NODE_HANDLES[type],
-          locale,
-          config: {},
-        } as FlowNodeData,
-      },
-    ]);
-    setSelectedId(id);
-  };
+  const addNode = React.useCallback(
+    (type: string, position?: { x: number; y: number }) => {
+      snapshot();
+      const id = `${type}-${Date.now().toString(36)}`;
+      const last = nodes.at(-1);
+      const placement =
+        position ?? {
+          x: last ? last.position.x : 260,
+          y: last ? last.position.y + 150 : 220,
+        };
+
+      setNodes((current) => [
+        ...current,
+        {
+          id,
+          type: 'dmflow',
+          position: placement,
+          data: {
+            nodeType: type,
+            label: nodeLabel(type, locale),
+            summary: '',
+            handles: NODE_HANDLES[type],
+            locale,
+            config: {},
+          } as FlowNodeData,
+        },
+      ]);
+      setSelectedId(id);
+    },
+    [nodes, locale, setNodes, snapshot],
+  );
+
+  /** Drops a palette block at the cursor, converting screen to canvas coordinates. */
+  const onDrop = React.useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const type = event.dataTransfer.getData('application/dmflow-node');
+      if (!type) return;
+
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      // Centre the block on the cursor rather than hanging it off the corner:
+      // a fresh block renders 236 wide and about 88 tall before it is configured.
+      addNode(type, { x: position.x - 118, y: position.y - 44 });
+    },
+    [addNode, screenToFlowPosition],
+  );
+
+  const onDragOver = React.useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
 
   const updateSelectedConfig = (config: Record<string, unknown>) => {
     setNodes((current) =>
@@ -318,12 +389,35 @@ export default function BuilderPage() {
 
   const deleteSelected = () => {
     if (!selectedId) return;
+    snapshot();
     setNodes((current) => current.filter((node) => node.id !== selectedId));
     setEdges((current) =>
       current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId),
     );
     setSelectedId(null);
   };
+
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      // Never hijack Ctrl+Z while somebody is typing a message into a config field.
+      if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (!(event.metaKey || event.ctrlKey)) return;
+
+      if (event.key.toLowerCase() === 'z') {
+        event.preventDefault();
+        if (event.shiftKey) redo();
+        else undo();
+      }
+      if (event.key.toLowerCase() === 'y') {
+        event.preventDefault();
+        redo();
+      }
+    };
+
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const selectedForInspector = selectedNode
@@ -370,6 +464,26 @@ export default function BuilderPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={undo}
+            disabled={!canUndo}
+            aria-label={t('builder.undo')}
+            title={`${t('builder.undo')} (Ctrl+Z)`}
+          >
+            <Undo2 />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={redo}
+            disabled={!canRedo}
+            aria-label={t('builder.redo')}
+            title={`${t('builder.redo')} (Ctrl+Shift+Z)`}
+          >
+            <Redo2 />
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setTriggerDialog(true)}>
             <Zap />
             {t('builder.triggers')}
@@ -405,13 +519,21 @@ export default function BuilderPage() {
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={(connection: Connection) =>
+            onConnect={(connection: Connection) => {
+              snapshot();
               setEdges((current) =>
                 addEdge({ ...connection, id: `e-${Date.now().toString(36)}`, animated: true }, current),
-              )
-            }
+              );
+            }}
             onNodeClick={(_, node) => setSelectedId(node.id)}
             onPaneClick={() => setSelectedId(null)}
+            // History is recorded when a drag starts, so undo restores where the
+            // block was before the move rather than mid-gesture.
+            onNodeDragStart={() => snapshot()}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            snapToGrid
+            snapGrid={[16, 16]}
             fitView
             proOptions={{ hideAttribution: true }}
             deleteKeyCode={['Backspace', 'Delete']}
@@ -623,5 +745,17 @@ function TriggerDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * ReactFlowProvider has to sit above the component that calls useReactFlow, which
+ * is what converts a drop's screen coordinates into canvas coordinates.
+ */
+export default function BuilderPage() {
+  return (
+    <ReactFlowProvider>
+      <Builder />
+    </ReactFlowProvider>
   );
 }

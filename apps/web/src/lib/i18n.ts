@@ -123,6 +123,9 @@ export const messages = {
     'automations.saved': 'Salvo',
 
     'builder.palette': 'Blocos',
+    'builder.dragHint': 'Arraste um bloco para o canvas ou clique para adicionar.',
+    'builder.undo': 'Desfazer',
+    'builder.redo': 'Refazer',
     'builder.inspector': 'Configuração',
     'builder.triggers': 'Gatilhos',
     'builder.addTrigger': 'Adicionar gatilho',
@@ -335,6 +338,9 @@ export const messages = {
     'automations.saved': 'Saved',
 
     'builder.palette': 'Blocks',
+    'builder.dragHint': 'Drag a block onto the canvas, or click to add it.',
+    'builder.undo': 'Undo',
+    'builder.redo': 'Redo',
     'builder.inspector': 'Configuration',
     'builder.triggers': 'Triggers',
     'builder.addTrigger': 'Add trigger',

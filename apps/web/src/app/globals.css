@@ -84,3 +84,15 @@ body {
 .react-flow__controls-button { background: rgb(var(--surface)); border-bottom: 1px solid rgb(var(--border)); fill: rgb(var(--fg)); }
 .react-flow__minimap { background: rgb(var(--surface)); border: 1px solid rgb(var(--border)); border-radius: 10px; }
 .react-flow__attribution { display: none; }
+
+/* The canvas has to *look* draggable: without a grab cursor people assume the
+   blocks are fixed and never try to move them. */
+.react-flow__node { cursor: grab; }
+.react-flow__node.dragging { cursor: grabbing; }
+.react-flow__node button,
+.react-flow__node a,
+.react-flow__node input,
+.react-flow__node select,
+.react-flow__node textarea { cursor: pointer; }
+.react-flow__pane { cursor: grab; }
+.react-flow__pane.dragging { cursor: grabbing; }

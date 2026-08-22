@@ -1,6 +1,6 @@
 'use client';
 
-import { Lock } from 'lucide-react';
+import { GripVertical, Lock } from 'lucide-react';
 import { NODE_META, nodeLabel } from './node-meta';
 import { useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
@@ -47,9 +47,12 @@ export function Palette({
 
   return (
     <div className="flex h-full flex-col">
-      <p className="px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">
-        {t('builder.palette')}
-      </p>
+      <div className="px-3 pb-2 pt-2.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">
+          {t('builder.palette')}
+        </p>
+        <p className="mt-1 text-[11px] leading-snug text-subtle">{t('builder.dragHint')}</p>
+      </div>
 
       <div className="flex-1 overflow-y-auto px-2 pb-3">
         {PALETTE_ORDER.map((type) => {
@@ -68,19 +71,30 @@ export function Palette({
             <button
               key={type}
               type="button"
+              data-node-type={type}
               disabled={blocked}
+              draggable={!blocked}
+              onDragStart={(event) => {
+                // The canvas reads this on drop to place the block under the cursor.
+                event.dataTransfer.setData('application/dmflow-node', type);
+                event.dataTransfer.effectAllowed = 'move';
+              }}
               onClick={() => onAdd(type)}
-              title={blocked ? t('builder.unavailableHint') : undefined}
+              title={blocked ? t('builder.unavailableHint') : t('builder.dragHint')}
               className={cn(
-                'mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors',
+                'group mb-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors',
                 blocked
                   ? 'cursor-not-allowed text-subtle'
-                  : 'text-fg hover:bg-elevated',
+                  : 'cursor-grab text-fg hover:bg-elevated active:cursor-grabbing',
               )}
             >
               <Icon className={cn('size-4 shrink-0', blocked ? 'text-subtle' : meta.tone)} />
               <span className="flex-1 truncate">{nodeLabel(type, locale)}</span>
-              {blocked ? <Lock className="size-3 shrink-0 text-subtle" /> : null}
+              {blocked ? (
+                <Lock className="size-3 shrink-0 text-subtle" />
+              ) : (
+                <GripVertical className="size-3.5 shrink-0 text-subtle opacity-0 transition-opacity group-hover:opacity-100" />
+              )}
             </button>
           );
         })}
