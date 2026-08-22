@@ -34,7 +34,18 @@ Nada mais no código precisa mudar — o motor só conhece a interface.
 
 ## Rodando
 
-Requisitos: Node 22+, pnpm 10+, Docker (ou Postgres 16 e Redis 7 locais).
+**Não é programador?** Siga o [`COMO-RODAR.md`](COMO-RODAR.md) — Docker Desktop,
+baixar o código e um comando. Cerca de 15 minutos.
+
+**Com Docker (tudo de uma vez):**
+
+```bash
+docker compose up
+```
+Sobe banco, cache, migrations, seed, API, worker e site. Abra http://localhost:3000
+e entre com `demo@dmflow.app` / `dmflow-demo-2026`.
+
+**Manualmente** — requisitos: Node 22+, pnpm 10+, Postgres 16 e Redis 7.
 
 ```bash
 pnpm install

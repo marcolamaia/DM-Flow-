@@ -1,3 +1,20 @@
+# Sobe a DM FLOW inteira com um comando:  docker compose up
+#
+# Os segredos abaixo são fixos e servem APENAS para teste local. Em produção eles
+# vêm do gerenciador de segredos do provedor, nunca de um arquivo versionado.
+
+x-app-env: &app-env
+  NODE_ENV: development
+  DATABASE_URL: postgresql://dmflow:dmflow@postgres:5432/dmflow?schema=public
+  REDIS_URL: redis://redis:6379
+  SESSION_SECRET: 5d5c0f3ad0d9d2b8f1a7c4e6b9d8a3f2c1e0b7d6a5948372615049382716f0e1
+  ENCRYPTION_KEY: 9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a39281706f5e4d3c2b1a0
+  API_URL: http://localhost:4000
+  WEB_URL: http://localhost:3000
+  INSTAGRAM_PROVIDER: mock
+  META_WEBHOOK_VERIFY_TOKEN: dmflow-verify-token
+  LOG_LEVEL: info
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -12,7 +29,7 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U dmflow']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
   redis:
     image: redis:7-alpine
@@ -24,7 +41,55 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+
+  # Cria as tabelas e popula os dados de demonstração, depois termina.
+  # Rodar de novo é inofensivo: as migrations e o seed são idempotentes.
+  setup:
+    build: .
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: >
+      sh -c "pnpm --filter @dmflow/db run deploy &&
+             pnpm --filter @dmflow/db run seed"
+    restart: 'no'
+
+  api:
+    build: .
+    environment:
+      <<: *app-env
+      API_PORT: 4000
+    ports: ['4000:4000']
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
+    command: node apps/api/dist/main.js
+    restart: unless-stopped
+
+  # Processo separado de propósito: o endpoint de webhook precisa responder em
+  # milissegundos, e uma automação lenta não pode ocupar o mesmo pool de threads.
+  worker:
+    build: .
+    environment: *app-env
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      setup: { condition: service_completed_successfully }
+    command: node apps/api/dist/worker.js
+    restart: unless-stopped
+
+  web:
+    build: .
+    environment:
+      <<: *app-env
+      PORT: 3000
+    ports: ['3000:3000']
+    depends_on:
+      api: { condition: service_started }
+    command: pnpm --filter @dmflow/web start
+    restart: unless-stopped
 
 volumes:
   dmflow_pg:
