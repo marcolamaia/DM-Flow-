@@ -4,17 +4,32 @@
   "private": true,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
   "scripts": {
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "deploy": "prisma migrate deploy",
     "push": "prisma db push",
     "studio": "prisma studio",
-    "seed": "tsx prisma/seed.ts",
+    "seed": "node -r @swc-node/register prisma/seed.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "seed:plans": "node -r @swc-node/register prisma/seed-plans.ts"
   },
-  "dependencies": { "@prisma/client": "^6.2.1" },
-  "devDependencies": { "prisma": "^6.2.1", "tsx": "^4.19.2", "typescript": "^5.7.2" }
+  "dependencies": {
+    "@dmflow/shared": "workspace:*",
+    "@prisma/client": "^6.2.1"
+  },
+  "devDependencies": {
+    "@swc-node/register": "^1.12.1",
+    "@swc/core": "^1.16.1",
+    "prisma": "^6.2.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
 }
