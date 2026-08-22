@@ -78,6 +78,7 @@ export class EngineService {
     // twice. Two runs of the same flow would double every message it sends.
     const inFlight = await this.prisma.execution.findFirst({
       where: {
+        workspaceId: input.workspaceId,
         automationId: input.automationId,
         contactId: input.contactId,
         status: { in: ['RUNNING', 'WAITING'] },
@@ -408,7 +409,7 @@ export class EngineService {
     this.prisma.assertTenant(execution, workspaceId);
 
     await this.prisma.execution.updateMany({
-      where: { id: executionId, status: { in: ['RUNNING', 'WAITING'] } },
+      where: { id: executionId, workspaceId, status: { in: ['RUNNING', 'WAITING'] } },
       data: { status: 'CANCELLED', finishedAt: new Date(), lockVersion: { increment: 1 } },
     });
   }

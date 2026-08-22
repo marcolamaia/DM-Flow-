@@ -132,7 +132,11 @@ export class NodeExecutorsService {
 
     const contact = await this.prisma.contact.findUnique({ where: { id: ctx.contactId } });
     const identity = await this.prisma.contactIdentity.findFirst({
-      where: { contactId: ctx.contactId, connectedAccountId: ctx.connectedAccountId ?? undefined },
+      where: {
+        workspaceId: ctx.workspaceId,
+        contactId: ctx.contactId,
+        connectedAccountId: ctx.connectedAccountId ?? undefined,
+      },
     });
     const account = ctx.connectedAccountId
       ? await this.prisma.connectedAccount.findUnique({ where: { id: ctx.connectedAccountId } })

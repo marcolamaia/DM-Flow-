@@ -18,7 +18,7 @@
 | Sessão | Cookie `httpOnly`, `SameSite=Lax`, `Secure` em produção. Rotação após 24h. Reuso de token revogado → todas as sessões do usuário são revogadas. |
 | Enumeração de e-mail | Login sempre executa uma verificação Argon2 dummy; recuperação de senha sempre responde sucesso. |
 | Autorização | Um único guard decide identidade, tenancy e permissão. Nenhum controller lê papel. Matriz por papel testada nos dois lados (permitido e negado). |
-| Isolamento de tenant | `workspaceId` obrigatório no escopo + `assertTenant` em toda leitura por id vindo do cliente. Cross-tenant responde `NOT_FOUND`, nunca `FORBIDDEN` — confirmar que o recurso existe alhures já é vazamento. |
+| Isolamento de tenant | `workspaceId` obrigatório no escopo + `assertTenant` em toda leitura por id vindo do cliente + varredura estática que reprova consulta em massa sem filtro de workspace, com justificativa escrita obrigatória para cada exceção. Cross-tenant responde `NOT_FOUND`, nunca `FORBIDDEN` — confirmar que o recurso existe alhures já é vazamento. |
 | Webhooks de entrada | HMAC sobre os **bytes crus**, comparação em tempo constante, 401 sem assinatura válida. |
 | Webhooks de saída | Assinados do mesmo jeito que exigimos na entrada, com backoff exponencial limitado. |
 | SSRF (node HTTP) | Só https; DNS resolvido e o **IP resultante** validado contra faixas privadas, loopback, link-local e metadados; IPv4-mapped IPv6 coberto; redirect revalidado salto a salto; headers próprios nunca encaminhados. |

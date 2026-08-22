@@ -136,7 +136,7 @@ export class InboxService {
     });
 
     const activeExecutions = await this.prisma.execution.count({
-      where: { conversationId, status: { in: ['RUNNING', 'WAITING'] } },
+      where: { workspaceId, conversationId, status: { in: ['RUNNING', 'WAITING'] } },
     });
 
     // Whether the operator can type right now is the same decision the engine
@@ -258,6 +258,7 @@ export class InboxService {
 
     const identity = await this.prisma.contactIdentity.findFirst({
       where: {
+        workspaceId,
         contactId: conversation!.contactId,
         connectedAccountId: conversation!.connectedAccountId,
       },

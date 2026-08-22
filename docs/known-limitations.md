@@ -46,7 +46,7 @@ Para destravar: executar a FASE 0 do `MASTER_PROMPT.pt-BR.md` (§4), preencher
 
 | Item | Situação | Observação |
 |---|---|---|
-| Row Level Security no Postgres | **Não implementado** | O isolamento é feito na aplicação (`assertTenant` + escopo obrigatório) e coberto por testes de integração que provam que o workspace B não lê dados do A. RLS como defesa em profundidade exige um role de banco sem `BYPASSRLS` e `SET LOCAL` por transação — está documentado como endurecimento pendente, não entregue. |
+| Row Level Security no Postgres | **Não implementado** | O isolamento é feito na aplicação em três camadas: escopo obrigatório por `workspaceId`, `assertTenant` em toda leitura por id vindo do cliente, e um teste que varre o código e **reprova** qualquer consulta em massa sem filtro de workspace (`src/__tests__/tenant-scoping.test.ts`). Toda exceção legítima precisa de justificativa escrita, então um vazamento e uma varredura intencional não se parecem. RLS no banco exige um role sem `BYPASSRLS` e `SET LOCAL` por transação — segue pendente como defesa em profundidade. |
 | Messenger e WhatsApp | Não implementados | Cada canal precisa da sua própria passada de validação e do seu próprio provider. `ProviderRegistry` recusa explicitamente. |
 | Rollups de analytics | Consultas ao vivo | Corretas e indexadas, mas em volume alto devem virar tabelas de rollup agendadas. |
 | Envio de e-mail | Não implementado | Convites e recuperação de senha devolvem o token na resposta em `development`; produção precisa de um provedor de e-mail. |
