@@ -4,10 +4,12 @@ import { CHANNELS, type Channel } from '@dmflow/shared';
 import { IngestionService } from './ingestion.service';
 import { ProviderRegistry } from '../providers/provider.registry';
 import { Public } from '../common/decorators/permissions.decorator';
+import { RateLimit, WEBHOOK_LIMIT } from '../common/decorators/rate-limit.decorator';
 import type { DmFlowRequest } from '../common/request-context';
 import { logger } from '../common/logger';
 
 @Public()
+@RateLimit(WEBHOOK_LIMIT)
 @Controller('webhooks')
 export class WebhooksController {
   constructor(

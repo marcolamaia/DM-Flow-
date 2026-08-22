@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { zodBody } from '../common/zod.pipe';
 import { ClientInfo, CurrentUser } from '../common/decorators/current-user.decorator';
 import { NoWorkspace, Public } from '../common/decorators/permissions.decorator';
+import { CREDENTIAL_LIMIT, RateLimit } from '../common/decorators/rate-limit.decorator';
 import type { AuthenticatedUser, DmFlowRequest } from '../common/request-context';
 
 const passwordSchema = z
@@ -38,6 +39,7 @@ export class AuthController {
   ) {}
 
   @Public()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('register')
   async register(
     @Body(zodBody(registerSchema)) body: z.infer<typeof registerSchema>,
@@ -48,6 +50,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('login')
   async login(
     @Body(zodBody(loginSchema)) body: z.infer<typeof loginSchema>,
@@ -104,6 +107,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('password/forgot')
   async forgot(@Body(zodBody(z.object({ email: z.string().email().max(200) }))) body: { email: string }) {
     const result = await this.auth.requestPasswordReset(body.email);
@@ -112,6 +116,7 @@ export class AuthController {
   }
 
   @Public()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('password/reset')
   async reset(
     @Body(zodBody(z.object({ token: z.string().min(10).max(200), password: passwordSchema })))
@@ -122,6 +127,7 @@ export class AuthController {
   }
 
   @NoWorkspace()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('password/change')
   async change(
     @CurrentUser() user: AuthenticatedUser,
@@ -139,6 +145,7 @@ export class AuthController {
   }
 
   @NoWorkspace()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('totp/confirm')
   async totpConfirm(
     @CurrentUser() user: AuthenticatedUser,
@@ -149,6 +156,7 @@ export class AuthController {
   }
 
   @NoWorkspace()
+  @RateLimit(CREDENTIAL_LIMIT)
   @Post('totp/disable')
   async totpDisable(
     @CurrentUser() user: AuthenticatedUser,

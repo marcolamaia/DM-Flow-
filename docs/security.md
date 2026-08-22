@@ -25,6 +25,8 @@
 | Injeção SQL | Predicados compilados com parâmetros vinculados; nomes de coluna vêm de allow-list e campo desconhecido é **rejeitado**, não escapado. |
 | Expressões | Interpolação é substituição de caminho, não linguagem. Acesso a `__proto__`, `prototype` e `constructor` bloqueado — testado. |
 | Logs | Redação no próprio logger, não no call site. |
+| Rate limiting | Guard global sobre toda rota, rodando **antes** da autenticação — uma enxurrada é barrada por um contador no Redis, não por uma consulta ao banco por requisição. Contagem sempre por endereço de origem (o único dado que o chamador não escolhe); credencial apresentada só **acrescenta** um balde mais estreito. Rotas de credencial: 10/min. API pública: 120/min por chave. Webhooks: 6000/min, porque estrangular retentativa da Meta cria justamente a fila que ela deveria evitar. Health check nunca é limitado. Middleware separado impõe um teto por endereço até em rota inexistente, que não chega a guard nenhum. Redis fora do ar degrada para "permitir", nunca para "recusar tudo". |
+| Resposta 429 | `Retry-After` e `RateLimit-Limit/Remaining/Reset` em toda resposta, não só na recusa — cliente educado desacelera antes de ser barrado. |
 | Stripe | Assinatura verificada sobre bytes crus; evento gravado pelo id do Stripe antes de ser aplicado, então redelivery não aplica upgrade duplicado. |
 | Auditoria | `AuditLog` append-only; falha de escrita nunca derruba a ação descrita. |
 
@@ -34,7 +36,6 @@
 |---|---|
 | Row Level Security | Exige role de banco sem `BYPASSRLS` e `SET LOCAL app.workspace_id` por transação. O isolamento atual é de aplicação, com testes que provam o bloqueio entre tenants — mas RLS é defesa em profundidade e deve ser adicionada antes de produção. |
 | Rotação de chave de cifra | O formato já carrega prefixo de versão (`v1.`); falta o job de recifragem. |
-| Rate limiting por IP/rota | Configurado no env, ainda não aplicado como guard global. |
 | Verificação de e-mail obrigatória | Campo existe; fluxo de envio não. |
 | Varredura de segredos no CI | Pipeline ainda não criado. |
 

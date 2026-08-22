@@ -18,6 +18,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { HealthController } from './health/health.controller';
 import { CorrelationMiddleware } from './common/correlation.middleware';
+import { RateLimitMiddleware } from './common/rate-limit.middleware';
 
 @Module({
   imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
@@ -25,6 +26,7 @@ import { CorrelationMiddleware } from './common/correlation.middleware';
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationMiddleware).forRoutes('*');
+    // Correlation first so a throttled request still carries an id in the logs.
+    consumer.apply(CorrelationMiddleware, RateLimitMiddleware).forRoutes('*');
   }
 }

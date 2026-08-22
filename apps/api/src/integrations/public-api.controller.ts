@@ -7,6 +7,7 @@ import { EngineService } from '../engine/engine.service';
 import { QuotaService } from '../billing/quota.service';
 import { zodBody } from '../common/zod.pipe';
 import { Public } from '../common/decorators/permissions.decorator';
+import { PUBLIC_API_LIMIT, RateLimit } from '../common/decorators/rate-limit.decorator';
 
 /**
  * Public API for customers' own systems.
@@ -17,6 +18,7 @@ import { Public } from '../common/decorators/permissions.decorator';
  * exposing a raw send endpoint would be a way around every window rule.
  */
 @Public()
+@RateLimit(PUBLIC_API_LIMIT)
 @Controller('v1')
 export class PublicApiController {
   constructor(

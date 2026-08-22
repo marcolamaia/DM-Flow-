@@ -7,6 +7,7 @@ import { QuotaService } from './quota.service';
 import { zodBody } from '../common/zod.pipe';
 import { CurrentUser, CurrentWorkspace } from '../common/decorators/current-user.decorator';
 import { NoWorkspace, Public, RequirePermission } from '../common/decorators/permissions.decorator';
+import { RateLimit, WEBHOOK_LIMIT } from '../common/decorators/rate-limit.decorator';
 import type { AuthenticatedUser, DmFlowRequest, WorkspaceContext } from '../common/request-context';
 import { logger } from '../common/logger';
 
@@ -57,6 +58,7 @@ export class BillingController {
    * raw bytes — never by a session.
    */
   @Public()
+  @RateLimit(WEBHOOK_LIMIT)
   @Post('stripe/webhook')
   @HttpCode(200)
   async webhook(@Req() req: DmFlowRequest, @Res() res: Response) {

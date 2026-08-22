@@ -51,6 +51,14 @@ export class DmFlowExceptionFilter implements ExceptionFilter {
       logger.warn(logPayload, 'request rejected');
     }
 
+    // A 429 without Retry-After tells a client it is too fast but not how much to
+    // slow down, so every well-behaved client has to guess. The limiter puts the
+    // real number in context; this is where it becomes a header.
+    const retryAfter = payload.context?.retryAfterSeconds;
+    if (payload.httpStatus === 429 && typeof retryAfter === 'number') {
+      res.setHeader('Retry-After', String(retryAfter));
+    }
+
     res.status(payload.httpStatus).json({ error: payload });
   }
 
