@@ -8,6 +8,7 @@ import { RedisService } from './redis/redis.service';
 import { EngineService } from './engine/engine.service';
 import { IngestionService } from './ingestion/ingestion.service';
 import { PrismaService } from './prisma/prisma.service';
+import { BillingService } from './billing/billing.service';
 import { QUEUE_NAMES, type EngineJob, type IngestionJob } from './engine/queues';
 import { uuidv7 } from '@dmflow/shared';
 
@@ -26,6 +27,7 @@ async function bootstrap(): Promise<void> {
   const engine = app.get(EngineService);
   const ingestion = app.get(IngestionService);
   const prisma = app.get(PrismaService);
+  const billing = app.get(BillingService);
 
   const connection = redis.queueConnection;
 
@@ -84,6 +86,10 @@ async function bootstrap(): Promise<void> {
   // ── Maintenance: hourly housekeeping the product depends on being true.
   const maintenance = async (): Promise<void> => {
     try {
+      // Suspension only happens after the grace period has genuinely elapsed.
+      const suspended = await billing.suspendOverdueWorkspaces();
+      if (suspended > 0) logger.warn({ suspended }, 'workspaces suspended for non-payment');
+
       const expired = await prisma.idempotencyRecord.deleteMany({
         where: { expiresAt: { not: null, lte: new Date() } },
       });
