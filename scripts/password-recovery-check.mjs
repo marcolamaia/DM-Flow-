@@ -12,16 +12,30 @@ const check = (name, ok, detail = '') => {
   if (!ok) failures.push(name);
 };
 
+// Every run gets its own source address. The credential rate limit counts by
+// origin and is doing its job — without this, running this file twice in a row
+// exhausts the bucket and the login checks at the end read as broken features.
+const runPrefix = `${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 256)}`;
+let addressCounter = 0;
+const freshAddress = () => `10.${runPrefix}.${(addressCounter += 1)}`;
+
+const call = (path, body) =>
+  fetch(API + path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'X-Forwarded-For': freshAddress() },
+    body: JSON.stringify(body),
+  });
+
 // A real account to lock out and recover.
-const reg = await fetch(`${API}/auth/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email, password: oldPassword, name: 'Pessoa Que Esqueceu' }),
-});
+const reg = await call('/auth/register', { email, password: oldPassword, name: 'Pessoa Que Esqueceu' });
 check('conta criada', reg.status === 201);
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const context = await browser.newContext({
+  viewport: { width: 1280, height: 900 },
+  extraHTTPHeaders: { 'X-Forwarded-For': freshAddress() },
+});
+const page = await context.newPage();
 
 // 1. The link has to exist on the login screen at all.
 await page.goto(`${WEB}/login`);
@@ -51,11 +65,7 @@ check('endereço desconhecido responde igual', /Se existir uma conta/.test(await
 
 // 3. The token from the mail log — in this installation mail is written, not sent.
 const token = await (async () => {
-  const res = await fetch(`${API}/auth/password/forgot`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
+  const res = await call('/auth/password/forgot', { email });
   const body = await res.json();
   return body.token ?? null;
 })();
@@ -100,18 +110,10 @@ await page.waitForTimeout(2000);
 check('token não funciona duas vezes', !/Senha alterada/.test(await page.textContent('body')));
 
 // 7. What actually matters: the new password works and the old one does not.
-const withNew = await fetch(`${API}/auth/login`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email, password: newPassword }),
-});
+const withNew = await call('/auth/login', { email, password: newPassword });
 check('entra com a senha nova', withNew.status === 201, `status ${withNew.status}`);
 
-const withOld = await fetch(`${API}/auth/login`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  body: JSON.stringify({ email, password: oldPassword }),
-});
+const withOld = await call('/auth/login', { email, password: oldPassword });
 check('senha antiga não entra mais', withOld.status === 401, `status ${withOld.status}`);
 
 await browser.close();

@@ -18,6 +18,7 @@ import {
   CreditCard,
   Monitor,
   ShieldCheck,
+  Lock,
 } from 'lucide-react';
 import { get, post, setWorkspaceId } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
@@ -39,6 +40,7 @@ const SETTINGS_NAV: Array<{ href: string; label: MessageKey; icon: React.Compone
   { href: '/settings/channels', label: 'nav.channels', icon: Plug },
   { href: '/settings/team', label: 'nav.team', icon: Users },
   { href: '/settings/billing', label: 'nav.billing', icon: CreditCard },
+  { href: '/settings/security', label: 'security.title', icon: Lock },
   { href: '/settings', label: 'nav.settings', icon: Settings },
 ];
 

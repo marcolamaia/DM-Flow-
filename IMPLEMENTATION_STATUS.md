@@ -47,8 +47,8 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | Workspaces e papéis | **PRONTO** | — |
 | Convites | **PRONTO** | — |
 | Recuperar senha | **PRONTO** | Corrigido na auditoria: telas criadas e 15 checagens em navegador |
-| **Trocar a própria senha** | **ANDAMENTO** | Rota existe, nenhuma tela chama |
-| **Segundo fator (TOTP)** | **ANDAMENTO** | Login aceita o código; **não existe tela para ativar** |
+| Trocar a própria senha | **PRONTO** | Tela em /settings/security, testada em navegador |
+| Segundo fator (TOTP) | **PRONTO** | Ativar com QR, confirmar e desativar; verificado gerando código real |
 | Sessões visíveis e revogação | **NÃO INICIADO** | Fila #38 |
 | Trocar e-mail, excluir conta | **NÃO INICIADO** | Fila #39 |
 | **Login com Google** | **BLOQUEADO** | Precisa de `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` |
@@ -63,8 +63,8 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | Motor de execução | **PRONTO** | Durável, com lock duplo |
 | Filas, workers, retry, fila de mortos | **PRONTO** | — |
 | Idempotência | **PRONTO** | Stripe e Meta |
-| **Contatos** | **ANDAMENTO** | Tela só lê. **12 rotas de escrita sem interface** |
-| **Etiquetas, campos, segmentos** | **ANDAMENTO** | Backend completo. **8 rotas sem interface** |
+| **Contatos** | **ANDAMENTO** | Editar, etiquetar e excluir prontos. Faltam importar, exportar e juntar duplicados |
+| **Etiquetas, campos, segmentos** | **ANDAMENTO** | Etiquetas prontas (criar, renomear, excluir). Campos e segmentos ainda sem tela |
 | Inbox e conversas | **ANDAMENTO** | Envio e leitura funcionam; atribuir e mudar status sem tela |
 | **Chaves de API** | **ANDAMENTO** | 3 rotas sem interface |
 | **Webhooks de saída** | **ANDAMENTO** | 5 rotas sem interface |
@@ -109,11 +109,11 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 
 | Módulo | Estado | O que falta |
 |---|---|---|
-| Testes | **ANDAMENTO** | 222 testes + 45 no navegador. Falta cobrir contatos e inbox |
+| Testes | **ANDAMENTO** | 222 testes + 72 no navegador. Falta cobrir inbox |
 | Limite de requisições | **PRONTO** | — |
 | Logs estruturados | **PRONTO** | Nunca registram senha nem token |
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |
-| **Dependências vulneráveis** | **ANDAMENTO** | 27 avisos. `nodemailer` é o único em código de produção |
+| Dependências vulneráveis | **PRONTO** | `nodemailer` atualizado. O resto é desenvolvimento ou não nos alcança — ver SECURITY.md |
 | **CI** | **NÃO INICIADO** | Fila #26 |
 | **Deploy na Heroku** | **NÃO INICIADO** | Fila #46 |
 | **CockroachDB** | **BLOQUEADO** | Precisa de cluster |

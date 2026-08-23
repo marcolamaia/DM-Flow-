@@ -123,9 +123,8 @@ O que sobra, e por que não é urgente:
 | 1 | Row Level Security no Postgres, como quarta camada de isolamento | #24 |
 | 2 | Sessões visíveis para o próprio usuário, com revogação | #38 |
 | 3 | Reautenticação antes de ação sensível | #38 |
-| 4 | Tela para ativar segundo fator — o login já aceita o código, mas ninguém consegue ligar | #50 |
-| 5 | Validação de upload (tipo, tamanho, dono) quando houver upload | #25 |
-| 6 | Rotação programada de segredos | — |
+| 4 | Validação de upload (tipo, tamanho, dono) quando houver upload | #25 |
+| 5 | Rotação programada de segredos | — |
 
 ---
 
