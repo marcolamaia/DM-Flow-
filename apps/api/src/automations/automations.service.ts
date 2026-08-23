@@ -18,6 +18,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { QuotaService } from '../billing/quota.service';
 import { CapabilityService } from '../capabilities/capability.service';
+import { DomainEventsService } from '../admin/domain-events.service';
 
 export interface TriggerInput {
   type: TriggerType;
@@ -34,6 +35,7 @@ export class AutomationsService {
     private readonly audit: AuditService,
     private readonly quota: QuotaService,
     private readonly capabilities: CapabilityService,
+    private readonly events: DomainEventsService,
   ) {}
 
   async list(workspaceId: string) {
@@ -322,6 +324,15 @@ export class AutomationsService {
       entityType: 'Automation',
       entityId: automationId,
       after: { versionId, versionNumber: automation!.draftVersion.versionNumber },
+    });
+
+    // Publishing is the moment the platform starts doing something for the person
+    // who signed up, which is what the activation figure is counting.
+    await this.events.record({
+      event: 'automation.published',
+      workspaceId,
+      userId,
+      properties: { automationId, versionNumber: automation!.draftVersion.versionNumber },
     });
 
     return { publishedVersionId: versionId, validationReport: report };

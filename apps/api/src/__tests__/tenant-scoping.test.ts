@@ -60,6 +60,12 @@ const BULK_OPERATIONS = [
  */
 const JUSTIFIED_SYSTEM_QUERIES: Array<{ file: string; model: string; operation: string; why: string }> = [
   {
+    file: 'src/admin/metrics.service.ts',
+    model: 'subscription',
+    operation: 'findMany',
+    why: "Platform-wide by definition: MRR is the total across every tenant, and a per-workspace filter would make it a different number. Reachable only through AdminGuard, which requires a platform-admin grant held in its own table and re-read from the database on every request. Returns totals, never one tenant's records.",
+  },
+  {
     file: 'src/auth/auth.controller.ts',
     model: 'workspaceMember',
     operation: 'findMany',

@@ -18,6 +18,7 @@ import { SecretBox, hashToken } from '../common/crypto';
 import { loadEnv } from '../config/env';
 import { logger } from '../common/logger';
 import { MailService } from '../mail/mail.service';
+import { DomainEventsService } from '../admin/domain-events.service';
 
 const ARGON_OPTIONS: argon2.Options = {
   type: argon2.argon2id,
@@ -37,6 +38,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly sessions: SessionService,
     private readonly mail: MailService,
+    private readonly events: DomainEventsService,
   ) {
     this.secretBox = new SecretBox(loadEnv().ENCRYPTION_KEY);
   }
@@ -99,6 +101,14 @@ export class AuthService {
     await this.sessions.issue(userId, meta, res);
     logger.info({ userId, workspaceId }, 'user registered');
 
+    // Recorded as two facts rather than one. "How many people signed up" and
+    // "how many accounts exist" stop being the same question the moment somebody
+    // is invited into a workspace instead of creating theirs.
+    await this.events.recordMany([
+      { event: 'user.registered', userId, workspaceId, properties: { locale } },
+      { event: 'workspace.created', workspaceId, userId, properties: { plan: FREE_PLAN_CODE } },
+    ]);
+
     // Sent after the transaction commits. Inside it, a slow mail server would
     // hold a database transaction open, and a failed send would roll back an
     // account the person can already sign in to.
@@ -121,6 +131,14 @@ export class AuthService {
     const valid = await argon2.verify(hash, input.password).catch(() => false);
 
     if (!user || !valid || user.deletedAt) {
+      // The address is recorded in properties, not in userId: a failure against
+      // an address nobody registered has no user to attach it to, and inventing
+      // one would make the count of failed logins wrong.
+      await this.events.record({
+        event: 'user.login_failed',
+        userId: user?.id ?? null,
+        properties: { reason: user ? (user.deletedAt ? 'deleted' : 'password') : 'no_account' },
+      });
       throw new DmFlowError('INVALID_CREDENTIALS');
     }
 
@@ -138,6 +156,7 @@ export class AuthService {
     });
 
     await this.sessions.issue(user.id, meta, res);
+    await this.events.record({ event: 'user.logged_in', userId: user.id });
     return { userId: user.id };
   }
 
@@ -266,6 +285,7 @@ export class AuthService {
     ]);
 
     logger.info({ userId: record.userId }, 'email verified');
+    await this.events.record({ event: 'user.email_verified', userId: record.userId });
     return { email: record.email };
   }
 

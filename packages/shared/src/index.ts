@@ -5,6 +5,7 @@ export * from './rbac.js';
 export * from './platform-rbac.js';
 export * from './domain-events.js';
 export * from './plans.js';
+export * from './metrics.js';
 export * from './capabilities.js';
 export * from './predicate.js';
 export * from './flow.js';

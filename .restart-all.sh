@@ -10,8 +10,14 @@ SP=/tmp/claude-0/-home-user-DM-Flow-/80f3ab05-3e95-5a2d-9bb7-eda89de14384/scratc
 # setsid, not just nohup: without its own session these die with the shell that
 # started them, which is why the API kept vanishing right after logging that it
 # had started.
-pgrep -f "dist/main.j[s]" >/dev/null || setsid node apps/api/dist/main.js > "$SP/prod-api.log" 2>&1 < /dev/null &
-pgrep -f "dist/worker.j[s]" >/dev/null || setsid node apps/api/dist/worker.js > "$SP/prod-worker.log" 2>&1 < /dev/null &
+# Always restarted, never merely ensured: an API process that survived from
+# before the last build keeps serving the old code, and answers 404 for routes
+# that do exist — which reads exactly like a bug in the new code.
+pkill -f "dist/main.j[s]" 2>/dev/null
+pkill -f "dist/worker.j[s]" 2>/dev/null
+sleep 1
+setsid node apps/api/dist/main.js > "$SP/prod-api.log" 2>&1 < /dev/null &
+setsid node apps/api/dist/worker.js > "$SP/prod-worker.log" 2>&1 < /dev/null &
 pgrep -f "next-serve[r]" >/dev/null || (cd apps/web && NODE_ENV=production setsid npx next start -p 3000 > "$SP/web.log" 2>&1 < /dev/null &)
 sleep 8
 echo -n "postgres: "; pg_isready | tail -1

@@ -1,13 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import type Stripe from 'stripe';
-import { DmFlowError, uuidv7 } from '@dmflow/shared';
+import { DmFlowError, monthlyCents, uuidv7 } from '@dmflow/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { StripeClient } from './stripe.client';
 import { loadEnv } from '../config/env';
 import { logger } from '../common/logger';
+import { DomainEventsService } from '../admin/domain-events.service';
 
 type StripeStatus = Stripe.Subscription.Status;
+
+/** What a subscription was worth at one moment, for comparing against another. */
+interface SubscriptionSnapshot {
+  status: string;
+  planCode: string;
+  currency: string;
+  monthlyCents: number;
+}
 
 const STATUS_MAP: Record<string, string> = {
   trialing: 'TRIALING',
@@ -26,6 +35,7 @@ export class BillingService {
     private readonly prisma: PrismaService,
     private readonly stripe: StripeClient,
     private readonly audit: AuditService,
+    private readonly events: DomainEventsService,
   ) {}
 
   async listPlans() {
@@ -254,8 +264,10 @@ export class BillingService {
         const workspaceId = await this.resolveWorkspace(sub);
         if (!workspaceId) return;
 
+        const before = await this.snapshot(workspaceId);
         const freePlan = await this.prisma.plan.findUnique({ where: { code: 'free' } });
         if (freePlan) await this.applyPlan(workspaceId, freePlan.id, 'CANCELED');
+        await this.recordSubscriptionChange(workspaceId, before, await this.snapshot(workspaceId));
 
         // Cancellation drops to Free rather than suspending: the customer stopped
         // paying, they did not fail to pay. Their data and a working free tier stay.
@@ -277,6 +289,7 @@ export class BillingService {
           invoice.last_finalization_error?.message ??
           'O pagamento da assinatura não foi concluído.';
 
+        const before = await this.snapshot(workspaceId);
         await this.prisma.subscription.update({
           where: { workspaceId },
           data: {
@@ -284,6 +297,14 @@ export class BillingService {
             lastPaymentError: reason.slice(0, 300),
             pastDueSince: new Date(),
           },
+        });
+        await this.recordSubscriptionChange(workspaceId, before, await this.snapshot(workspaceId));
+        await this.events.record({
+          event: 'payment.failed',
+          workspaceId,
+          amountCents: invoice.amount_due ?? null,
+          currency: invoice.currency?.toUpperCase() ?? null,
+          properties: { reason: reason.slice(0, 300) },
         });
 
         // Grace first: the workspace keeps working while the customer fixes the card.
@@ -302,9 +323,22 @@ export class BillingService {
         const workspaceId = await this.resolveWorkspaceByCustomer(invoice.customer);
         if (!workspaceId) return;
 
+        const before = await this.snapshot(workspaceId);
         await this.prisma.subscription.update({
           where: { workspaceId },
           data: { status: 'ACTIVE', lastPaymentError: null, pastDueSince: null },
+        });
+        await this.recordSubscriptionChange(workspaceId, before, await this.snapshot(workspaceId));
+
+        // Cash actually received, in the currency Stripe charged it in. Separate
+        // from MRR on purpose: an annual invoice is one payment and twelve months
+        // of recurring revenue, and conflating them overstates both.
+        await this.events.record({
+          event: 'payment.succeeded',
+          workspaceId,
+          amountCents: invoice.amount_paid ?? null,
+          currency: invoice.currency?.toUpperCase() ?? null,
+          properties: { invoiceId: invoice.id },
         });
         await this.reactivate(workspaceId, 'payment_succeeded');
         return;
@@ -318,6 +352,8 @@ export class BillingService {
   private async syncSubscription(sub: Stripe.Subscription): Promise<void> {
     const workspaceId = await this.resolveWorkspace(sub);
     if (!workspaceId) return;
+
+    const before = await this.snapshot(workspaceId);
 
     const priceId = sub.items.data[0]?.price.id;
     const plan = priceId
@@ -341,6 +377,8 @@ export class BillingService {
         canceledAt: sub.canceled_at ? new Date(sub.canceled_at * 1000) : null,
       },
     });
+
+    await this.recordSubscriptionChange(workspaceId, before, await this.snapshot(workspaceId));
 
     if (status === 'ACTIVE' || status === 'TRIALING') {
       await this.reactivate(workspaceId, 'subscription_active');
@@ -381,6 +419,105 @@ export class BillingService {
     }
 
     return overdue.length;
+  }
+
+  /**
+   * What a subscription was worth, at the moment we look at it.
+   *
+   * Read before and after every change, because the panel's questions are about
+   * movement — started, upgraded, cancelled — and movement is a difference
+   * between two snapshots, not a state.
+   */
+  private async snapshot(workspaceId: string): Promise<SubscriptionSnapshot | null> {
+    const row = await this.prisma.subscription.findUnique({
+      where: { workspaceId },
+      include: { plan: true },
+    });
+    if (!row) return null;
+
+    return {
+      status: row.status,
+      planCode: row.plan.code,
+      currency: row.plan.currency,
+      monthlyCents: monthlyCents(row.plan.priceCents, row.plan.interval),
+    };
+  }
+
+  /**
+   * Turns a before/after pair into the facts the metrics layer reads.
+   *
+   * One definition of what counts as starting, upgrading and cancelling, used by
+   * every path that can change a subscription. Written here rather than repeated
+   * at each Stripe event, because the day the two disagree is the day MRR and
+   * churn stop adding up to each other.
+   */
+  private async recordSubscriptionChange(
+    workspaceId: string,
+    before: SubscriptionSnapshot | null,
+    after: SubscriptionSnapshot | null,
+  ): Promise<void> {
+    if (!after) return;
+
+    const was = before?.monthlyCents ?? 0;
+    const now = after.monthlyCents;
+    const currency = after.currency;
+    const properties = { from: before?.planCode ?? null, to: after.planCode };
+
+    if (was === 0 && now > 0) {
+      await this.events.record({
+        event: 'subscription.started',
+        workspaceId,
+        amountCents: now,
+        currency,
+        properties,
+      });
+    } else if (was > 0 && now === 0) {
+      // Worth what it was worth when it ended, not what the plan costs today.
+      await this.events.record({
+        event: 'subscription.cancelled',
+        workspaceId,
+        amountCents: was,
+        currency: before?.currency ?? currency,
+        properties,
+      });
+    } else if (now > was) {
+      await this.events.record({
+        event: 'subscription.upgraded',
+        workspaceId,
+        amountCents: now - was,
+        currency,
+        properties,
+      });
+    } else if (now < was) {
+      await this.events.record({
+        event: 'subscription.downgraded',
+        workspaceId,
+        amountCents: was - now,
+        currency,
+        properties,
+      });
+    }
+
+    // A status move is a separate fact from a price move: going past due changes
+    // nothing about the plan, and the panel needs to see it anyway.
+    const stopped = before && before.status === 'ACTIVE' && after.status !== 'ACTIVE';
+    const resumed = before && before.status !== 'ACTIVE' && after.status === 'ACTIVE';
+
+    if (stopped && (after.status === 'PAST_DUE' || after.status === 'UNPAID')) {
+      await this.events.record({
+        event: 'subscription.past_due',
+        workspaceId,
+        amountCents: now,
+        currency,
+      });
+    } else if (resumed && before.status !== 'TRIALING' && now > 0) {
+      await this.events.record({
+        event: 'subscription.reactivated',
+        workspaceId,
+        amountCents: now,
+        currency,
+      });
+    }
   }
 
   private async reactivate(workspaceId: string, reason: string): Promise<void> {

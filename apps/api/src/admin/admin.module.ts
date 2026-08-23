@@ -3,6 +3,8 @@ import { AdminController } from './admin.controller';
 import { AdminGuard } from './admin.guard';
 import { AdminAuditService } from './admin-audit.service';
 import { DomainEventsService } from './domain-events.service';
+import { MetricsController } from './metrics.controller';
+import { MetricsService } from './metrics.service';
 
 /**
  * Global so that any service can record a domain event without importing the
@@ -11,8 +13,8 @@ import { DomainEventsService } from './domain-events.service';
  */
 @Global()
 @Module({
-  controllers: [AdminController],
-  providers: [AdminGuard, AdminAuditService, DomainEventsService],
-  exports: [DomainEventsService, AdminAuditService],
+  controllers: [AdminController, MetricsController],
+  providers: [AdminGuard, AdminAuditService, DomainEventsService, MetricsService],
+  exports: [DomainEventsService, AdminAuditService, MetricsService],
 })
 export class AdminModule {}
