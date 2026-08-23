@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Tags, Users } from 'lucide-react';
+import { ListFilter, SlidersHorizontal, Tags, Users } from 'lucide-react';
 import { ApiError, get } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
@@ -63,6 +63,18 @@ export default function ContactsPage() {
               <Button size="sm" variant="secondary">
                 <Tags className="size-3.5" />
                 {t('tags.title')}
+              </Button>
+            </Link>
+            <Link href="/contacts/fields">
+              <Button size="sm" variant="secondary">
+                <SlidersHorizontal className="size-3.5" />
+                {t('fields.title')}
+              </Button>
+            </Link>
+            <Link href="/contacts/segments">
+              <Button size="sm" variant="secondary">
+                <ListFilter className="size-3.5" />
+                {t('segments.title')}
               </Button>
             </Link>
           </div>

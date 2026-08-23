@@ -113,10 +113,25 @@ export function Field({
   children: React.ReactNode;
   className?: string;
 }) {
+  const generated = React.useId();
+
+  // The label has to point at the control, or it is decoration: a screen reader
+  // announces "edit text, blank" and nobody knows which field they are in. The
+  // id is generated here and handed to the control, unless the caller already
+  // gave it one — in which case theirs wins and the label follows it.
+  let controlId: string | undefined;
+  const described = React.Children.map(children, (child) => {
+    if (!React.isValidElement(child) || controlId) return child;
+
+    const existing = (child.props as { id?: string }).id;
+    controlId = existing ?? generated;
+    return existing ? child : React.cloneElement(child as React.ReactElement<{ id?: string }>, { id: generated });
+  });
+
   return (
     <div className={cn('mb-4', className)}>
-      {label ? <Label>{label}</Label> : null}
-      {children}
+      {label ? <Label htmlFor={controlId}>{label}</Label> : null}
+      {described}
       {hint && !error ? <p className="mt-1.5 text-xs text-subtle">{hint}</p> : null}
       {error ? <p className="mt-1.5 text-xs text-danger">{error}</p> : null}
     </div>

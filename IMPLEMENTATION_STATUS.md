@@ -64,7 +64,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | Filas, workers, retry, fila de mortos | **PRONTO** | — |
 | Idempotência | **PRONTO** | Stripe e Meta |
 | **Contatos** | **ANDAMENTO** | Editar, etiquetar e excluir prontos. Faltam importar, exportar e juntar duplicados |
-| **Etiquetas, campos, segmentos** | **ANDAMENTO** | Etiquetas prontas (criar, renomear, excluir). Campos e segmentos ainda sem tela |
+| Etiquetas, campos, segmentos | **PRONTO** | Três telas em /contacts; segmento mostra quantos contatos reais se encaixam antes de salvar |
 | Inbox e conversas | **ANDAMENTO** | Envio e leitura funcionam; atribuir e mudar status sem tela |
 | Chaves de API | **PRONTO** | Criar, listar e revogar em /settings/integrations; segredo exibido uma vez |
 | Webhooks de saída | **PRONTO** | Criar, listar e excluir; segredo de assinatura exibido uma vez |
@@ -109,7 +109,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 
 | Módulo | Estado | O que falta |
 |---|---|---|
-| Testes | **ANDAMENTO** | 222 testes + 88 no navegador. Falta cobrir inbox |
+| Testes | **ANDAMENTO** | 222 testes + 106 no navegador, em 7 baterias. Falta cobrir inbox |
 | Limite de requisições | **PRONTO** | — |
 | Logs estruturados | **PRONTO** | Nunca registram senha nem token |
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |
