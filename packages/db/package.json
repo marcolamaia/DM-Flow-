@@ -24,12 +24,12 @@
   "dependencies": {
     "@dmflow/shared": "workspace:*",
     "@prisma/client": "^6.2.1",
-    "argon2": "^0.41.1"
+    "argon2": "^0.41.1",
+    "prisma": "^6.2.1"
   },
   "devDependencies": {
     "@swc-node/register": "^1.12.1",
     "@swc/core": "^1.16.1",
-    "prisma": "^6.2.1",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

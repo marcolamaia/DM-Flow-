@@ -1,0 +1,51 @@
+{
+  "name": "DM FLOW — API",
+  "description": "API, worker e scheduler da DM FLOW. O site sobe como um app separado.",
+  "repository": "https://github.com/marcolamaia/DM-Flow-",
+  "stack": "heroku-24",
+  "buildpacks": [{ "url": "heroku/nodejs" }],
+  "formation": {
+    "web": { "quantity": 1, "size": "basic" },
+    "worker": { "quantity": 1, "size": "basic" }
+  },
+  "addons": ["heroku-redis:mini"],
+  "env": {
+    "NODE_ENV": { "value": "production" },
+    "DATABASE_URL": {
+      "description": "String de conexão do CockroachDB ou do Postgres. Nunca versionada.",
+      "required": true
+    },
+    "REDIS_URL": {
+      "description": "Preenchida automaticamente pelo add-on heroku-redis.",
+      "required": false
+    },
+    "SESSION_SECRET": {
+      "description": "Mínimo de 32 caracteres. Gere com: openssl rand -base64 48",
+      "generator": "secret"
+    },
+    "ENCRYPTION_KEY": {
+      "description": "Exatamente 64 caracteres hexadecimais. Gere com: openssl rand -hex 32. Trocar esta chave torna ilegível todo token de canal já guardado.",
+      "required": true
+    },
+    "API_URL": { "description": "Endereço público desta API. Ex.: https://dmflow-api.herokuapp.com", "required": true },
+    "WEB_URL": { "description": "Endereço público do site. Usado nos links dos e-mails e no CORS.", "required": true },
+    "MAIL_TRANSPORT": {
+      "description": "Precisa ser smtp em produção. Com log a aplicação se recusa a subir, porque log não entrega e-mail nenhum.",
+      "value": "smtp"
+    },
+    "SMTP_URL": { "description": "Ex.: smtps://usuario:senha@smtp.provedor.com:465", "required": true },
+    "MAIL_FROM": { "description": "Remetente dos e-mails. Ex.: DM FLOW <nao-responda@seudominio.com>", "required": true },
+    "STRIPE_SECRET_KEY": { "description": "Chave secreta do Stripe. Vazia mantém a cobrança em modo local.", "required": false },
+    "STRIPE_WEBHOOK_SECRET": { "description": "Segredo do endpoint de webhook, criado no painel do Stripe.", "required": false },
+    "INSTAGRAM_PROVIDER": {
+      "description": "sandbox usa o simulador. live exige App da Meta aprovado e META_API_VERSION explícita.",
+      "value": "sandbox"
+    }
+  },
+  "scripts": {},
+  "environments": {
+    "test": {
+      "scripts": { "test": "pnpm test" }
+    }
+  }
+}

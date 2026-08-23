@@ -52,7 +52,15 @@ let cached: Env | undefined;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   if (cached) return cached;
 
-  const parsed = envSchema.safeParse(source);
+  // Heroku — and every platform that assigns a port — injects PORT and kills a
+  // process that binds anything else. Honoured before API_PORT, because a
+  // container that ignores the port it was given is a container that never
+  // serves a request and gets terminated a minute later with a timeout.
+  const withPlatformPort = source.PORT
+    ? { ...source, API_PORT: source.PORT }
+    : source;
+
+  const parsed = envSchema.safeParse(withPlatformPort);
   if (!parsed.success) {
     const details = parsed.error.issues
       .map((issue) => `  - ${issue.path.join('.')}: ${issue.message}`)

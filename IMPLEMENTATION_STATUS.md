@@ -115,7 +115,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |
 | Dependências vulneráveis | **PRONTO** | `nodemailer` atualizado. O resto é desenvolvimento ou não nos alcança — ver SECURITY.md |
 | **CI** | **NÃO INICIADO** | Fila #26 |
-| **Deploy na Heroku** | **NÃO INICIADO** | Fila #46 |
+| Deploy na Heroku | **ANDAMENTO** | Procfiles, app.json, build e DEPLOYMENT.md prontos e verificados aqui. **Falta rodar numa Heroku de verdade** — depende do Marcos criar os apps |
 | **CockroachDB** | **BLOQUEADO** | Precisa de cluster |
 | Row Level Security | **NÃO INICIADO** | Fila #24 |
 | Backup e restauração | **NÃO INICIADO** | Fila #49 |

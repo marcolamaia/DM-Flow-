@@ -1,0 +1,5 @@
+# Processo do app do site na Heroku.
+#
+# `next start` lê a porta de $PORT, que a Heroku injeta. Sem -p ele usaria 3000
+# e a Heroku mataria o dyno por timeout de bind.
+web: npx next start -p $PORT

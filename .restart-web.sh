@@ -3,13 +3,15 @@
 # working directory can never break the .env load.
 set -e
 cd /home/user/DM-Flow-
-# The build must NOT inherit NODE_ENV=development from .env: next build under a
-# non-production NODE_ENV fails while prerendering the error pages.
+# O .env precisa ser carregado ANTES do build: NEXT_PUBLIC_API_URL é gravada
+# dentro do bundle, e o build se recusa a rodar sem ela.
+set -a; . ./.env; set +a
 if [ "$1" != "--no-build" ]; then
-  (cd apps/web && env -u NODE_ENV npx next build > /tmp/webbuild.log 2>&1) \
+  # Sem contorno de NODE_ENV: o script de build do pacote já força production,
+  # que é o que um build de produção é, diga o shell o que disser.
+  (pnpm --filter @dmflow/web build > /tmp/webbuild.log 2>&1) \
     || { tail -20 /tmp/webbuild.log; exit 1; }
 fi
-set -a; . ./.env; set +a
 ps aux | grep "[n]ext-server" | awk '{print $2}' | xargs -r kill -9 || true
 sleep 2
 SP=/tmp/claude-0/-home-user-DM-Flow-/80f3ab05-3e95-5a2d-9bb7-eda89de14384/scratchpad

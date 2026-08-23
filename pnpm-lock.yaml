@@ -271,6 +271,9 @@ importers:
       argon2:
         specifier: ^0.41.1
         version: 0.41.1
+      prisma:
+        specifier: ^6.2.1
+        version: 6.19.3(typescript@5.9.3)
     devDependencies:
       '@swc-node/register':
         specifier: ^1.12.1
@@ -278,9 +281,6 @@ importers:
       '@swc/core':
         specifier: ^1.16.1
         version: 1.16.1
-      prisma:
-        specifier: ^6.2.1
-        version: 6.19.3(typescript@5.9.3)
       tsx:
         specifier: ^4.19.2
         version: 4.23.12
