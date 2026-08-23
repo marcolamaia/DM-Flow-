@@ -66,8 +66,8 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | **Contatos** | **ANDAMENTO** | Editar, etiquetar e excluir prontos. Faltam importar, exportar e juntar duplicados |
 | **Etiquetas, campos, segmentos** | **ANDAMENTO** | Etiquetas prontas (criar, renomear, excluir). Campos e segmentos ainda sem tela |
 | Inbox e conversas | **ANDAMENTO** | Envio e leitura funcionam; atribuir e mudar status sem tela |
-| **Chaves de API** | **ANDAMENTO** | 3 rotas sem interface |
-| **Webhooks de saída** | **ANDAMENTO** | 5 rotas sem interface |
+| Chaves de API | **PRONTO** | Criar, listar e revogar em /settings/integrations; segredo exibido uma vez |
+| Webhooks de saída | **PRONTO** | Criar, listar e excluir; segredo de assinatura exibido uma vez |
 | **Modelos de automação** | **ANDAMENTO** | 3 rotas sem interface |
 | Pastas de automação | **NÃO INICIADO** | Fila #41–43 |
 | Upload de mídia | **NÃO INICIADO** | Hoje só por URL. Fila #25 |
@@ -109,7 +109,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 
 | Módulo | Estado | O que falta |
 |---|---|---|
-| Testes | **ANDAMENTO** | 222 testes + 72 no navegador. Falta cobrir inbox |
+| Testes | **ANDAMENTO** | 222 testes + 88 no navegador. Falta cobrir inbox |
 | Limite de requisições | **PRONTO** | — |
 | Logs estruturados | **PRONTO** | Nunca registram senha nem token |
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |
