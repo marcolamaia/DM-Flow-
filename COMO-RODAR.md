@@ -37,12 +37,21 @@ git clone -b claude/dm-flow-master-prompt-pmxmab https://github.com/marcolamaia/
 
 ## Passo 3 — Ligar
 
-Abra o terminal **dentro da pasta do projeto**:
+Primeiro você precisa abrir o terminal **dentro da pasta do projeto**. O jeito
+mais fácil, que funciona sempre:
 
-- **Mac:** clique com o botão direito na pasta → *Serviços* → *Novo Terminal na Pasta*
-- **Windows:** abra a pasta, clique na barra de endereço, digite `cmd` e aperte Enter
+**No Mac:**
 
-Cole este comando e aperte Enter:
+1. Aperte `Command` + `barra de espaço`, digite **Terminal** e aperte Enter.
+2. Na janela preta que abrir, digite `cd ` — a letra c, a letra d e **um espaço**.
+3. **Arraste a pasta do projeto** de dentro do Finder para essa janela preta.
+   O caminho da pasta aparece sozinho.
+4. Aperte Enter.
+
+**No Windows:** abra a pasta, clique na barra de endereço lá em cima, apague o
+que estiver escrito, digite `cmd` e aperte Enter.
+
+Agora cole este comando e aperte Enter:
 
 ```bash
 docker compose up
