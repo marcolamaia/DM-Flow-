@@ -120,6 +120,20 @@ function RegisterForm() {
           </form>
         </Card>
 
+        {/* O consentimento é dado aqui, então o link precisa estar aqui — não
+            escondido num rodapé de outra página. */}
+        <p className="mt-4 text-center text-[12px] leading-relaxed text-subtle">
+          {t('legal.acceptOnRegister')}{' '}
+          <Link href="/termos" className="text-muted underline hover:text-fg">
+            {t('legal.terms')}
+          </Link>{' '}
+          {t('legal.and')}{' '}
+          <Link href="/privacidade" className="text-muted underline hover:text-fg">
+            {t('legal.privacy')}
+          </Link>
+          .
+        </p>
+
         <p className="mt-5 text-center text-[13px] text-muted">
           <Link href="/login" className="text-accent hover:underline">
             {t('auth.toLogin')}

@@ -629,6 +629,12 @@ export const messages = {
     'predicate.op.gt': 'é maior que',
     'predicate.op.lt': 'é menor que',
     'predicate.op.within_days': 'nos últimos (dias)',
+
+    // ── Páginas jurídicas ──
+    'legal.privacy': 'Política de privacidade',
+    'legal.terms': 'Termos de uso',
+    'legal.acceptOnRegister': 'Ao criar a conta você concorda com os',
+    'legal.and': 'e a',
   },
 
   en: {
@@ -1250,6 +1256,12 @@ export const messages = {
     'predicate.op.gt': 'is greater than',
     'predicate.op.lt': 'is less than',
     'predicate.op.within_days': 'within the last (days)',
+
+    // ── Legal pages ──
+    'legal.privacy': 'Privacy policy',
+    'legal.terms': 'Terms of use',
+    'legal.acceptOnRegister': 'By creating an account you agree to the',
+    'legal.and': 'and the',
   },
 } as const;
 

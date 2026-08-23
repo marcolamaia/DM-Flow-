@@ -129,6 +129,15 @@ function LoginForm() {
             {t('auth.toRegister')}
           </Link>
         </p>
+
+        <p className="mt-6 flex justify-center gap-4 text-[12px] text-subtle">
+          <Link href="/privacidade" className="hover:text-muted hover:underline">
+            {t('legal.privacy')}
+          </Link>
+          <Link href="/termos" className="hover:text-muted hover:underline">
+            {t('legal.terms')}
+          </Link>
+        </p>
       </div>
     </main>
   );
