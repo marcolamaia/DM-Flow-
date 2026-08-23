@@ -17,6 +17,7 @@ import {
   Workflow,
   CreditCard,
   Monitor,
+  ShieldCheck,
 } from 'lucide-react';
 import { get, post, setWorkspaceId } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
@@ -48,6 +49,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   const me = useQuery({ queryKey: ['me'], queryFn: () => get<Me>('/auth/me'), retry: false });
+
+  // Asked quietly, and a refusal is the normal answer for almost everybody. The
+  // API returns 404 rather than 403 to a customer, so a failure here says
+  // nothing about whether the area exists — it just means no link.
+  const admin = useQuery({
+    queryKey: ['admin', 'me'],
+    queryFn: () => get<{ role: string }>('/admin/me'),
+    retry: false,
+    enabled: !me.isError,
+  });
 
   React.useEffect(() => {
     if (me.isError) router.replace('/login');
@@ -150,6 +161,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {admin.data ? (
+            <Link
+              href="/admin"
+              className={cn(
+                'mb-0.5 mt-5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors',
+                pathname.startsWith('/admin')
+                  ? 'bg-elevated text-fg'
+                  : 'text-muted hover:bg-elevated/60 hover:text-fg',
+              )}
+            >
+              <ShieldCheck className="size-[17px]" />
+              {t('admin.title')}
+            </Link>
+          ) : null}
         </nav>
 
         <div className="border-t border-border p-3">

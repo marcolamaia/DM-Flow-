@@ -60,6 +60,12 @@ const BULK_OPERATIONS = [
  */
 const JUSTIFIED_SYSTEM_QUERIES: Array<{ file: string; model: string; operation: string; why: string }> = [
   {
+    file: 'src/admin/admin-subscriptions.service.ts',
+    model: 'subscription',
+    operation: 'findMany',
+    why: "Platform-wide by definition: this is the administrative list of who pays what, across every tenant. Reachable only through AdminGuard, and personal data within it is gated separately behind admin.users.pii.",
+  },
+  {
     file: 'src/admin/metrics.service.ts',
     model: 'subscription',
     operation: 'findMany',

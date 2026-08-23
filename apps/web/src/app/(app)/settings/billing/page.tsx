@@ -8,18 +8,7 @@ import { PageHeader } from '@/components/page-header';
 import { Badge, Banner, Button, Card, CardBody, CardHeader, CardTitle, Skeleton } from '@/components/ui/primitives';
 import { toast } from '@/components/ui/toast';
 import { formatMoney, formatNumber } from '@/lib/utils';
-import type { UsageSnapshot } from '@/lib/types';
-
-interface Plan {
-  id: string;
-  code: string;
-  name: string;
-  description: string | null;
-  priceCents: number;
-  currency: string;
-  features: string[];
-  limits: Record<string, number | null>;
-}
+import type { Plan, UsageSnapshot } from '@/lib/types';
 
 interface Subscription {
   status: string;

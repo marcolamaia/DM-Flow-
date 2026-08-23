@@ -101,11 +101,13 @@ export class SessionService {
     this.clearCookie(res);
   }
 
-  async revokeAllForUser(userId: string): Promise<void> {
-    await this.prisma.session.updateMany({
+  /** Returns how many sessions were actually ended, for the record of why. */
+  async revokeAllForUser(userId: string): Promise<number> {
+    const result = await this.prisma.session.updateMany({
       where: { userId, revokedAt: null },
       data: { revokedAt: new Date() },
     });
+    return result.count;
   }
 
   private setCookie(res: Response, token: string, expiresAt: Date): void {

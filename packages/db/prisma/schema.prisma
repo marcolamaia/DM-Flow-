@@ -183,6 +183,10 @@ model User {
   totpEnabledAt   DateTime?
   emailVerifiedAt DateTime?
   lastLoginAt     DateTime?
+  /// Set by a platform admin. Distinct from deletedAt: suspension is reversible
+  /// and the person keeps their data; deletion is neither.
+  suspendedAt      DateTime?
+  suspensionReason String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   deletedAt       DateTime?

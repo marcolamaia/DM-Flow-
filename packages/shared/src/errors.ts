@@ -189,6 +189,20 @@ export const ERROR_CATALOG = {
     },
   },
 
+  ACCOUNT_SUSPENDED: {
+    code: 'ACCOUNT_SUSPENDED',
+    category: 'AUTH',
+    httpStatus: 403,
+    retryable: false,
+    message: {
+      // Says the account is blocked and where to ask about it, without repeating
+      // back a reason written for an internal audit trail.
+      'pt-BR':
+        'Esta conta está bloqueada. Seus dados continuam salvos. Fale com o suporte para entender o motivo e reativá-la.',
+      en: 'This account is blocked. Your data is safe. Contact support to find out why and have it reactivated.',
+    },
+  },
+
   // ── Billing
   WORKSPACE_SUSPENDED: {
     code: 'WORKSPACE_SUSPENDED',

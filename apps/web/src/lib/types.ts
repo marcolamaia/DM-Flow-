@@ -146,3 +146,138 @@ export interface ConversationSummary {
   assignee: { id: string; name: string } | null;
   lastMessage: { direction: string; senderType: string; content: Record<string, unknown> } | null;
 }
+
+export interface Plan {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  priceCents: number;
+  currency: string;
+  features: string[];
+  limits: Record<string, number | null>;
+}
+
+// ── Administrative panel ─────────────────────────────────────
+
+export interface AdminMe {
+  role: string;
+  permissions: string[];
+}
+
+export type MoneyByCurrency = Record<string, number>;
+
+export interface MetricDefinition {
+  id: string;
+  label: { 'pt-BR': string; en: string };
+  unit: 'money' | 'count' | 'ratio';
+  formula: { 'pt-BR': string; en: string };
+  source: string;
+  excludes?: { 'pt-BR': string; en: string };
+}
+
+export interface RevenueSnapshot {
+  mrr: MoneyByCurrency;
+  arr: MoneyByCurrency;
+  atRisk: MoneyByCurrency;
+  arpa: MoneyByCurrency;
+  activeSubscriptions: number;
+  trialingSubscriptions: number;
+  payingSubscriptions: number;
+  asOf: string;
+}
+
+export interface MetricRate {
+  value: number | null;
+  numerator: number;
+  denominator: number;
+  sampleSize: number;
+  reliable: boolean;
+}
+
+export interface GrowthReport {
+  period: { from: string; to: string; timeZone: string };
+  signups: number;
+  activatedWorkspaces: number;
+  newSubscriptions: number;
+  churnedSubscriptions: number;
+  logoChurn: MetricRate;
+  revenueChurn: MetricRate;
+  netRevenue: MoneyByCurrency;
+  ltv: MoneyByCurrency;
+  openingMrr: MoneyByCurrency;
+}
+
+export interface AdminOverview {
+  revenue: RevenueSnapshot;
+  growth: GrowthReport;
+  definitions: MetricDefinition[];
+}
+
+export interface AdminUserRow {
+  id: string;
+  email: string;
+  name: string | null;
+  piiMasked: boolean;
+  locale: string;
+  emailVerified: boolean;
+  lastLoginAt: string | null;
+  suspendedAt: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  workspaceCount: number;
+}
+
+export interface AdminUserDetail extends AdminUserRow {
+  twoFactorEnabled: boolean;
+  suspensionReason: string | null;
+  activeSessions: number;
+  workspaces: Array<{
+    id: string;
+    name: string;
+    slug: string;
+    status: string;
+    role: string;
+    joinedAt: string;
+    createdAt: string;
+    subscription: {
+      status: string;
+      plan: string;
+      currency: string;
+      monthlyCents: number;
+      currentPeriodEnd: string | null;
+    } | null;
+    usage: { contacts: number; automations: number; connectedAccounts: number };
+  }>;
+  recentEvents: Array<{ event: string; occurredAt: string; properties: Record<string, unknown> }>;
+}
+
+export interface AdminSubscriptionRow {
+  id: string;
+  status: string;
+  workspace: { id: string; name: string; status: string; createdAt: string };
+  owner: { id: string; email: string | null; name: string | null } | null;
+  plan: { code: string; name: string };
+  currency: string;
+  monthlyCents: number;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  pastDueSince: string | null;
+  lastPaymentError: string | null;
+  billingLinked: boolean;
+  createdAt: string;
+}
+
+export interface AdminAuditEntry {
+  id: string;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  workspaceId: string | null;
+  before: unknown;
+  after: unknown;
+  reason: string | null;
+  ip: string | null;
+  createdAt: string;
+  actor: { id: string; name: string; email: string } | null;
+}

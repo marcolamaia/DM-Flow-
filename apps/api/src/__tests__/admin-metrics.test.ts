@@ -345,10 +345,37 @@ describe('the panel can explain every number it shows', () => {
 });
 
 describe('one definition, everywhere', () => {
-  it('has exactly one place that turns a plan price into recurring revenue', () => {
-    // The whole point of the metrics layer: if a second file starts summing plan
-    // prices, the dashboard and the report drift apart, and neither is wrong
-    // enough to be obviously wrong.
+  it('has no second way of turning a plan price into a recurring figure', () => {
+    // The invariant is not "few files may ask what a plan is worth" — any screen
+    // may. It is that none of them works it out itself. A file that divides a
+    // price by twelve on its own is the start of the dashboard and the report
+    // disagreeing, and neither being obviously wrong.
+    const root = join(__dirname, '..');
+    const offenders: string[] = [];
+
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) {
+          if (entry !== '__tests__' && entry !== 'node_modules') walk(path);
+          continue;
+        }
+        if (!entry.endsWith('.ts')) continue;
+
+        const source = readFileSync(path, 'utf8');
+        // Arithmetic performed directly on a plan price, rather than handed to
+        // the shared normalisation.
+        if (/priceCents\s*[*/+-]|[*/+-]\s*[\w.]*priceCents/.test(source)) {
+          offenders.push(path.slice(root.length + 1));
+        }
+      }
+    };
+    walk(root);
+
+    expect(offenders).toEqual([]);
+  });
+
+  it('reads that definition from the shared package, not from a local copy', () => {
     const root = join(__dirname, '..');
     const callers: string[] = [];
 
@@ -367,11 +394,12 @@ describe('one definition, everywhere', () => {
     };
     walk(root);
 
-    expect(callers.sort()).toEqual([
-      // Reads it to record what a change was worth.
-      'billing/billing.service.ts',
-      // Reads it to total what everything is worth.
-      'admin/metrics.service.ts',
-    ].sort());
+    expect(callers.length).toBeGreaterThan(0);
+    for (const caller of callers) {
+      const source = readFileSync(join(root, caller), 'utf8');
+      // Every one of them imports it; none defines it.
+      expect(source, caller).toMatch(/monthlyCents[\s\S]*from '@dmflow\/shared'/);
+      expect(source, caller).not.toMatch(/function monthlyCents/);
+    }
   });
 });

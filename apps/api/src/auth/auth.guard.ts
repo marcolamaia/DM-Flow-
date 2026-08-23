@@ -53,6 +53,10 @@ export class AuthGuard implements CanActivate {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.deletedAt) throw new DmFlowError('NOT_AUTHENTICATED');
 
+    // Checked on every request, not only at sign-in: a suspension has to take
+    // effect now, not whenever the person's current session happens to expire.
+    if (user.suspendedAt) throw new DmFlowError('ACCOUNT_SUSPENDED');
+
     req.user = {
       id: user.id,
       email: user.email,

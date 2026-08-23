@@ -142,6 +142,10 @@ export class AuthService {
       throw new DmFlowError('INVALID_CREDENTIALS');
     }
 
+    // After the password check, so a blocked account is not a way to learn that
+    // an address is registered without knowing its password.
+    if (user.suspendedAt) throw new DmFlowError('ACCOUNT_SUSPENDED');
+
     if (user.totpEnabledAt && user.totpSecretEnc) {
       if (!input.totp) throw new DmFlowError('TOTP_REQUIRED');
       const secret = this.secretBox.decrypt(user.totpSecretEnc);
