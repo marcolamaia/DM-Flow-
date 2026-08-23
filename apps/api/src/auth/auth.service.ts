@@ -17,6 +17,7 @@ import { SessionService } from './session.service';
 import { SecretBox, hashToken } from '../common/crypto';
 import { loadEnv } from '../config/env';
 import { logger } from '../common/logger';
+import { MailService } from '../mail/mail.service';
 
 const ARGON_OPTIONS: argon2.Options = {
   type: argon2.argon2id,
@@ -26,6 +27,7 @@ const ARGON_OPTIONS: argon2.Options = {
 };
 
 const RESET_TTL_MS = 60 * 60 * 1000;
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -34,6 +36,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessions: SessionService,
+    private readonly mail: MailService,
   ) {
     this.secretBox = new SecretBox(loadEnv().ENCRYPTION_KEY);
   }
@@ -96,6 +99,11 @@ export class AuthService {
     await this.sessions.issue(userId, meta, res);
     logger.info({ userId, workspaceId }, 'user registered');
 
+    // Sent after the transaction commits. Inside it, a slow mail server would
+    // hold a database transaction open, and a failed send would roll back an
+    // account the person can already sign in to.
+    await this.issueEmailVerification(userId, email, input.name.trim(), locale);
+
     return { userId, workspaceId };
   }
 
@@ -157,10 +165,108 @@ export class AuthService {
       },
     });
 
-    logger.info({ userId: user.id }, 'password reset requested');
-    // Delivery is the mail provider's job; in development the token is returned so
-    // the flow is testable without an SMTP dependency.
-    return loadEnv().NODE_ENV === 'development' ? { token } : {};
+    const result = await this.mail.sendPasswordReset({
+      to: user.email,
+      locale: user.locale,
+      token,
+      expiresHours: RESET_TTL_MS / 3_600_000,
+    });
+
+    logger.info({ userId: user.id, delivered: result.delivered }, 'password reset requested');
+
+    // Under the log transport the link is handed back so the flow is exercisable
+    // without an SMTP server. Never under a real transport: the response would
+    // then be a way to obtain a reset link for any address.
+    return result.previewUrl ? { token } : {};
+  }
+
+  /**
+   * Issues a fresh verification token and emails it.
+   *
+   * Any token already outstanding for this user is consumed first. Leaving old
+   * ones live means a link from a previous address change still verifies, and
+   * "resend" would quietly widen the window every time it is pressed.
+   */
+  private async issueEmailVerification(
+    userId: string,
+    email: string,
+    name: string,
+    locale: string,
+  ): Promise<{ token?: string; delivered: boolean }> {
+    const token = randomToken(32);
+
+    await this.prisma.$transaction([
+      this.prisma.emailVerificationToken.updateMany({
+        where: { userId, usedAt: null },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.emailVerificationToken.create({
+        data: {
+          id: uuidv7(),
+          userId,
+          email,
+          tokenHash: hashToken(token),
+          expiresAt: new Date(Date.now() + VERIFY_TTL_MS),
+        },
+      }),
+    ]);
+
+    const result = await this.mail.sendEmailVerification({
+      to: email,
+      name,
+      locale,
+      token,
+      expiresHours: VERIFY_TTL_MS / 3_600_000,
+    });
+
+    return { token: result.previewUrl ? token : undefined, delivered: result.delivered };
+  }
+
+  /** Re-sends the verification email. Silent about accounts that are already verified. */
+  async resendEmailVerification(userId: string): Promise<{ token?: string }> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.deletedAt || user.emailVerifiedAt) return {};
+
+    const { token } = await this.issueEmailVerification(
+      user.id,
+      user.email,
+      user.name,
+      user.locale,
+    );
+    return token ? { token } : {};
+  }
+
+  async verifyEmail(token: string): Promise<{ email: string }> {
+    const record = await this.prisma.emailVerificationToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { user: true },
+    });
+
+    if (!record || record.usedAt || record.expiresAt.getTime() <= Date.now()) {
+      throw new DmFlowError('VERIFICATION_TOKEN_INVALID');
+    }
+
+    // The address may have been changed after the token was issued. Verifying the
+    // current address off a token issued for a previous one would prove nothing.
+    if (record.user.email !== record.email) {
+      throw new DmFlowError('VERIFICATION_TOKEN_INVALID', {
+        context: { reason: 'email_changed' },
+      });
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: record.userId },
+        data: { emailVerifiedAt: new Date() },
+      }),
+      this.prisma.emailVerificationToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      }),
+    ]);
+
+    logger.info({ userId: record.userId }, 'email verified');
+    return { email: record.email };
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {

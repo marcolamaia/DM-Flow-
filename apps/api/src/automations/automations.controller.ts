@@ -4,7 +4,7 @@ import { TRIGGER_TYPES, flowGraphSchema, type TriggerType } from '@dmflow/shared
 import { AutomationsService } from './automations.service';
 import { zodBody } from '../common/zod.pipe';
 import { CurrentUser, CurrentWorkspace } from '../common/decorators/current-user.decorator';
-import { RequirePermission } from '../common/decorators/permissions.decorator';
+import { RequirePermission, RequireVerifiedEmail } from '../common/decorators/permissions.decorator';
 import type { AuthenticatedUser, WorkspaceContext } from '../common/request-context';
 
 const triggerSchema = z.object({
@@ -90,6 +90,7 @@ export class AutomationsController {
   }
 
   @RequirePermission('automation:publish')
+  @RequireVerifiedEmail()
   @Post(':id/publish')
   publish(
     @CurrentWorkspace() ws: WorkspaceContext,

@@ -38,9 +38,21 @@ export interface ButtonProps
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild, loading, children, disabled, ...props }, ref) => {
-    const Comp = asChild ? Slot : 'button';
+    if (asChild) {
+      // Slot renders *into* the child element, so it demands exactly one element
+      // child. Adding the spinner slot alongside it makes two and throws, which
+      // took down every screen using an asChild button — the dashboard's empty
+      // state among them, the first thing a new account sees. A button wrapping a
+      // link is never in a loading state anyway.
+      return (
+        <Slot ref={ref} className={cn(buttonVariants({ variant, size }), className)} {...props}>
+          {children}
+        </Slot>
+      );
+    }
+
     return (
-      <Comp
+      <button
         ref={ref}
         className={cn(buttonVariants({ variant, size }), className)}
         disabled={disabled || loading}
@@ -48,7 +60,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {loading ? <Spinner className="size-4" /> : null}
         {children}
-      </Comp>
+      </button>
     );
   },
 );

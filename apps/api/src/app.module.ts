@@ -2,6 +2,7 @@ import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
 import { CommonModule } from './common/common.module';
+import { MailModule } from './mail/mail.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
 import { WorkspaceModule } from './workspace/workspace.module';
@@ -21,7 +22,7 @@ import { CorrelationMiddleware } from './common/correlation.middleware';
 import { RateLimitMiddleware } from './common/rate-limit.middleware';
 
 @Module({
-  imports: [PrismaModule, RedisModule, CommonModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
+  imports: [PrismaModule, RedisModule, CommonModule, MailModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {

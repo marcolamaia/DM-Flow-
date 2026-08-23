@@ -27,6 +27,14 @@ const envSchema = z.object({
   META_WEBHOOK_VERIFY_TOKEN: z.string().min(1).default('dmflow-verify-token'),
   META_API_VERSION: z.string().default(''),
 
+  // Mail. The default transport writes the message to the log instead of sending
+  // it, so the whole flow is exercisable without an SMTP dependency. Production
+  // refuses to start on that default — see the cross-field check below.
+  MAIL_TRANSPORT: z.enum(['log', 'smtp']).default('log'),
+  MAIL_FROM: z.string().email().default('nao-responda@dmflow.local'),
+  MAIL_FROM_NAME: z.string().default('DM FLOW'),
+  SMTP_URL: z.string().default(''),
+
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(60_000),
   RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(300),
@@ -67,6 +75,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (/^0+$/.test(env.ENCRYPTION_KEY)) {
       throw new Error('ENCRYPTION_KEY still holds its placeholder value.');
     }
+    // The log transport is a development convenience that silently swallows every
+    // message. Booting production with it would mean invitations and password
+    // resets simply never arrive, with nothing to show that anything is wrong.
+    if (env.MAIL_TRANSPORT === 'log') {
+      throw new Error(
+        'MAIL_TRANSPORT=log does not deliver anything. Set MAIL_TRANSPORT=smtp and SMTP_URL in production.',
+      );
+    }
+  }
+
+  if (env.MAIL_TRANSPORT === 'smtp' && !env.SMTP_URL) {
+    throw new Error('MAIL_TRANSPORT=smtp requires SMTP_URL.');
   }
 
   cached = env;

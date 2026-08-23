@@ -1,18 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ApiError, post, get, setWorkspaceId } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
-import { Button, Field, Input, Card } from '@/components/ui/primitives';
+import { Button, Field, Input, Card, Spinner } from '@/components/ui/primitives';
 import type { Me } from '@/lib/types';
 
-export default function LoginPage() {
+function LoginForm() {
   const { t } = useI18n();
   const { selectWorkspace } = useApp();
   const router = useRouter();
+  const params = useSearchParams();
+
+  /**
+   * Where to land after signing in.
+   *
+   * Only same-site paths are honoured. Taking an absolute URL from the query
+   * string would turn this into an open redirect — a link that looks like ours
+   * and lands on somebody else's login form.
+   */
+  const next = (() => {
+    const raw = params.get('next');
+    return raw && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/dashboard';
+  })();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +47,7 @@ export default function LoginPage() {
         setWorkspaceId(workspace.id);
         selectWorkspace(workspace.id);
       }
-      router.replace('/dashboard');
+      router.replace(next);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.code === 'TOTP_REQUIRED') setNeedsTotp(true);
@@ -110,5 +123,20 @@ export default function LoginPage() {
         </p>
       </div>
     </main>
+  );
+}
+
+/** useSearchParams needs a suspense boundary for the static shell to prerender. */
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center">
+          <Spinner className="size-5 text-muted" />
+        </main>
+      }
+    >
+      <LoginForm />
+    </Suspense>
   );
 }

@@ -23,6 +23,7 @@ import { useI18n, type MessageKey } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
 import { Avatar, Badge, Button, Spinner } from '@/components/ui/primitives';
 import { cn } from '@/lib/utils';
+import { EmailVerificationBanner } from '@/components/email-verification-banner';
 import type { Me } from '@/lib/types';
 
 const NAV: Array<{ href: string; label: MessageKey; icon: React.ComponentType<{ className?: string }> }> = [
@@ -202,7 +203,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {me.data.user.emailVerified ? null : (
+          <EmailVerificationBanner email={me.data.user.email} />
+        )}
+        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+      </main>
     </div>
   );
 }

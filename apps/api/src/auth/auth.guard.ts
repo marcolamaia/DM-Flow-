@@ -18,6 +18,7 @@ import {
   NO_WORKSPACE_KEY,
   PERMISSION_KEY,
   PUBLIC_KEY,
+  VERIFIED_EMAIL_KEY,
 } from '../common/decorators/permissions.decorator';
 
 export const WORKSPACE_HEADER = 'x-dmflow-workspace';
@@ -64,6 +65,14 @@ export class AuthGuard implements CanActivate {
 
     const store = requestContext.getStore();
     if (store) store.userId = user.id;
+
+    // Checked before tenancy so the answer does not depend on which workspace the
+    // request happens to name.
+    if (this.readMeta<boolean>(VERIFIED_EMAIL_KEY, context) && !user.emailVerifiedAt) {
+      throw new DmFlowError('EMAIL_NOT_VERIFIED', {
+        remediation: { action: 'resend_verification' },
+      });
+    }
 
     const skipWorkspace = this.readMeta<boolean>(NO_WORKSPACE_KEY, context);
     if (skipWorkspace) return true;

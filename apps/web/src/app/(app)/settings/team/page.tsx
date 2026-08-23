@@ -29,6 +29,15 @@ interface Invitation {
   expired: boolean;
 }
 
+
+/**
+ * Must match the link the invitation email carries. Two places building the same
+ * URL differently is how a copied link quietly 404s while the emailed one works.
+ */
+function inviteUrl(token: string): string {
+  return `${window.location.origin}/accept-invite?token=${encodeURIComponent(token)}`;
+}
+
 export default function TeamPage() {
   const { t, locale } = useI18n();
   const { workspaceId } = useApp();
@@ -37,7 +46,11 @@ export default function TeamPage() {
   const [inviting, setInviting] = React.useState(false);
   const [email, setEmail] = React.useState('');
   const [role, setRole] = React.useState('AGENT');
+  // Set only when the server could not deliver the email — then the link has to
+  // be handed over by other means. On a working mail setup it stays null and the
+  // dialog simply confirms the message went out.
   const [issuedToken, setIssuedToken] = React.useState<string | null>(null);
+  const [inviteSent, setInviteSent] = React.useState(false);
 
   const members = useQuery({
     queryKey: ['members', workspaceId],
@@ -52,9 +65,14 @@ export default function TeamPage() {
   });
 
   const invite = useMutation({
-    mutationFn: () => post<{ token: string }>('/workspaces/current/invitations', { email, role }),
+    mutationFn: () =>
+      post<{ inviteId: string; delivered: boolean; token?: string }>(
+        '/workspaces/current/invitations',
+        { email, role },
+      ),
     onSuccess: (result) => {
-      setIssuedToken(result.token);
+      setInviteSent(true);
+      setIssuedToken(result.delivered ? null : (result.token ?? null));
       setEmail('');
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
     },
@@ -165,26 +183,43 @@ export default function TeamPage() {
         open={inviting}
         onOpenChange={(open) => {
           setInviting(open);
-          if (!open) setIssuedToken(null);
+          if (!open) {
+            setIssuedToken(null);
+            setInviteSent(false);
+          }
         }}
       >
         <DialogContent title={t('team.invite')}>
-          {issuedToken ? (
+          {inviteSent ? (
             <div>
-              <p className="mb-2 text-[13px] text-muted">{t('team.inviteLink')}</p>
-              <code className="block break-all rounded-lg border border-border bg-bg px-3 py-2 font-mono text-[11.5px]">
-                {`${window.location.origin}/invite/${issuedToken}`}
-              </code>
-              <DialogFooter>
-                <Button
-                  onClick={() => {
-                    navigator.clipboard?.writeText(`${window.location.origin}/invite/${issuedToken}`);
-                    toast.success('copiado');
-                  }}
-                >
-                  Copiar
-                </Button>
-              </DialogFooter>
+              <p className="text-[13px] font-medium">
+                {issuedToken ? t('team.inviteNotSent') : t('team.inviteSent')}
+              </p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-muted">
+                {issuedToken ? t('team.inviteNotSentHint') : t('team.inviteSentHint')}
+              </p>
+
+              {issuedToken ? (
+                <>
+                  <code className="mt-3 block break-all rounded-lg border border-border bg-bg px-3 py-2 font-mono text-[11.5px]">
+                    {inviteUrl(issuedToken)}
+                  </code>
+                  <DialogFooter>
+                    <Button
+                      onClick={() => {
+                        navigator.clipboard?.writeText(inviteUrl(issuedToken));
+                        toast.success(t('common.copied'));
+                      }}
+                    >
+                      {t('common.copy')}
+                    </Button>
+                  </DialogFooter>
+                </>
+              ) : (
+                <DialogFooter>
+                  <Button onClick={() => setInviting(false)}>{t('common.close')}</Button>
+                </DialogFooter>
+              )}
             </div>
           ) : (
             <>

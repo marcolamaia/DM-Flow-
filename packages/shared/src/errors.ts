@@ -111,6 +111,29 @@ export const ERROR_CATALOG = {
     },
   },
 
+  VERIFICATION_TOKEN_INVALID: {
+    code: 'VERIFICATION_TOKEN_INVALID',
+    category: 'AUTH',
+    httpStatus: 400,
+    retryable: false,
+    message: {
+      'pt-BR': 'Este link de confirmação é inválido, expirou ou já foi usado. Peça um novo.',
+      en: 'This confirmation link is invalid, expired or already used. Request a new one.',
+    },
+  },
+
+  EMAIL_NOT_VERIFIED: {
+    code: 'EMAIL_NOT_VERIFIED',
+    category: 'AUTH',
+    httpStatus: 403,
+    retryable: false,
+    message: {
+      'pt-BR':
+        'Confirme seu e-mail antes de fazer esta ação. Enviamos um link para o endereço do seu cadastro.',
+      en: 'Confirm your email before doing this. We sent a link to your registered address.',
+    },
+  },
+
   // ── Permission / tenancy
   FORBIDDEN: {
     code: 'FORBIDDEN',

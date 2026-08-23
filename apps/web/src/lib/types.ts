@@ -6,6 +6,7 @@ export interface Me {
     locale: string;
     avatarUrl: string | null;
     totpEnabled: boolean;
+    emailVerified: boolean;
   };
   workspaces: Array<{
     id: string;

@@ -90,6 +90,15 @@ beforeAll(async () => {
       workspaceB = response.body.workspaceId;
     }
   }
+
+  // These accounts stand in for people who signed up and confirmed their address.
+  // Leaving them unconfirmed would make every case below fail on the verification
+  // check rather than on the behaviour it is actually testing — the block itself
+  // has its own case in 'email verification'.
+  await prisma.user.updateMany({
+    where: { email: { in: [userA.email, userB.email] } },
+    data: { emailVerifiedAt: new Date() },
+  });
 });
 
 afterAll(async () => {

@@ -5,7 +5,7 @@ import { CHANNELS, type Channel } from '@dmflow/shared';
 import { ChannelsService } from './channels.service';
 import { zodBody } from '../common/zod.pipe';
 import { CurrentUser, CurrentWorkspace } from '../common/decorators/current-user.decorator';
-import { Public, RequirePermission } from '../common/decorators/permissions.decorator';
+import { Public, RequirePermission, RequireVerifiedEmail } from '../common/decorators/permissions.decorator';
 import type { AuthenticatedUser, WorkspaceContext } from '../common/request-context';
 import { loadEnv } from '../config/env';
 
@@ -20,6 +20,7 @@ export class ChannelsController {
   }
 
   @RequirePermission('channel:connect')
+  @RequireVerifiedEmail()
   @Post('connect')
   connect(
     @CurrentWorkspace() ws: WorkspaceContext,

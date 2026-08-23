@@ -17,6 +17,8 @@
 | Senhas | Argon2id (19 MiB, t=2, p=1). |
 | Sessão | Cookie `httpOnly`, `SameSite=Lax`, `Secure` em produção. Rotação após 24h. Reuso de token revogado → todas as sessões do usuário são revogadas. |
 | Enumeração de e-mail | Login sempre executa uma verificação Argon2 dummy; recuperação de senha sempre responde sucesso. |
+| Confirmação de e-mail | Token opaco com hash, validade de 24h, uso único, e o token anterior é consumido a cada reenvio — apertar "reenviar" move a janela em vez de alargá-la. Um token emitido para um endereço não confirma outro depois de uma troca de e-mail. Conta sem confirmar continua navegando; o que fica bloqueado é conectar canal e publicar automação — as duas ações em que a conta passa a agir no mundo lá fora. |
+| Entrega de e-mail | Transporte `log` (não entrega, imprime) recusado na inicialização em produção. Falha de envio nunca derruba a ação já concluída, e o corpo da mensagem nunca vai para o log de erro — corpos carregam links de redefinição. Nomes e nomes de workspace são escapados antes de entrar no HTML: eles vêm de usuários e vão parar na caixa de entrada de outra pessoa. |
 | Autorização | Um único guard decide identidade, tenancy e permissão. Nenhum controller lê papel. Matriz por papel testada nos dois lados (permitido e negado). |
 | Isolamento de tenant | `workspaceId` obrigatório no escopo + `assertTenant` em toda leitura por id vindo do cliente + varredura estática que reprova consulta em massa sem filtro de workspace, com justificativa escrita obrigatória para cada exceção. Cross-tenant responde `NOT_FOUND`, nunca `FORBIDDEN` — confirmar que o recurso existe alhures já é vazamento. |
 | Webhooks de entrada | HMAC sobre os **bytes crus**, comparação em tempo constante, 401 sem assinatura válida. |
@@ -36,7 +38,6 @@
 |---|---|
 | Row Level Security | Exige role de banco sem `BYPASSRLS` e `SET LOCAL app.workspace_id` por transação. O isolamento atual é de aplicação, com testes que provam o bloqueio entre tenants — mas RLS é defesa em profundidade e deve ser adicionada antes de produção. |
 | Rotação de chave de cifra | O formato já carrega prefixo de versão (`v1.`); falta o job de recifragem. |
-| Verificação de e-mail obrigatória | Campo existe; fluxo de envio não. |
 | Varredura de segredos no CI | Pipeline ainda não criado. |
 
 ## Resposta a incidente

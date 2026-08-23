@@ -21,7 +21,17 @@ const registerSchema = z.object({
   email: z.string().email().max(200),
   password: passwordSchema,
   name: z.string().min(2).max(120),
-  workspaceName: z.string().min(2).max(120).optional(),
+  // An untouched optional text field arrives as an empty string, not as absent.
+  // Treating that as "not provided" is the difference between a field labelled
+  // optional and one that rejects the signup when it is left alone.
+  workspaceName: z
+    .string()
+    .max(120)
+    .optional()
+    .transform((value) => value?.trim() || undefined)
+    .refine((value) => value === undefined || value.length >= 2, {
+      message: 'must be at least 2 characters when provided',
+    }),
   locale: z.string().max(10).optional(),
 });
 
@@ -91,6 +101,7 @@ export class AuthController {
         locale: record?.locale ?? user.locale,
         avatarUrl: record?.avatarUrl ?? null,
         totpEnabled: Boolean(record?.totpEnabledAt),
+        emailVerified: Boolean(record?.emailVerifiedAt),
       },
       workspaces: memberships
         .filter((m) => !m.workspace.deletedAt)
@@ -124,6 +135,30 @@ export class AuthController {
   ) {
     await this.auth.resetPassword(body.token, body.password);
     return { ok: true };
+  }
+
+  /**
+   * Public because the person clicking the link in their inbox may not be signed
+   * in on that device — which is the common case when the link is opened on a
+   * phone. Holding the token is the proof; a session is not required.
+   */
+  @Public()
+  @RateLimit(CREDENTIAL_LIMIT)
+  @Post('email/verify')
+  async verifyEmail(
+    @Body(zodBody(z.object({ token: z.string().min(10).max(200) }))) body: { token: string },
+  ) {
+    return this.auth.verifyEmail(body.token);
+  }
+
+  @NoWorkspace()
+  @RateLimit(CREDENTIAL_LIMIT)
+  @Post('email/verify/resend')
+  async resendVerification(@CurrentUser() user: AuthenticatedUser) {
+    // Always reports success, including for an already-verified account: the
+    // response must not become a way to probe an account's state.
+    const result = await this.auth.resendEmailVerification(user.id);
+    return { ok: true, ...result };
   }
 
   @NoWorkspace()

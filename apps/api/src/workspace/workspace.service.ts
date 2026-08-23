@@ -11,6 +11,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { hashToken } from '../common/crypto';
 import { QuotaService } from '../billing/quota.service';
+import { MailService } from '../mail/mail.service';
+import { logger } from '../common/logger';
 
 const INVITE_TTL_MS = 7 * 86_400_000;
 
@@ -20,6 +22,7 @@ export class WorkspaceService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly quota: QuotaService,
+    private readonly mail: MailService,
   ) {}
 
   async create(userId: string, name: string, timezone?: string, locale?: string) {
@@ -136,7 +139,7 @@ export class WorkspaceService {
     invitedById: string,
     email: string,
     role: MemberRole,
-  ): Promise<{ inviteId: string; token: string; expiresAt: Date }> {
+  ): Promise<{ inviteId: string; expiresAt: Date; delivered: boolean; token?: string }> {
     if (role === 'OWNER') {
       throw new DmFlowError('FORBIDDEN', {
         context: { reason: 'ownership is transferred, not invited' },
@@ -174,7 +177,38 @@ export class WorkspaceService {
       after: { email: normalized, role },
     });
 
-    return { inviteId: invitation.id, token, expiresAt };
+    const [inviter, workspace] = await Promise.all([
+      this.prisma.user.findUnique({ where: { id: invitedById } }),
+      this.prisma.workspace.findUnique({ where: { id: workspaceId } }),
+    ]);
+
+    const result = await this.mail.sendInvitation({
+      to: normalized,
+      // The recipient has no account yet, so there is no preference to read —
+      // the workspace's own language is the best guess available.
+      locale: workspace?.locale,
+      inviterName: inviter?.name ?? 'DM FLOW',
+      workspaceName: workspace?.name ?? 'DM FLOW',
+      role,
+      token,
+      expiresHours: INVITE_TTL_MS / 3_600_000,
+    });
+
+    if (!result.delivered && !result.previewUrl) {
+      // The invitation row stands — it is valid and the link can be re-sent — but
+      // the person who pressed invite has to know nothing arrived.
+      logger.error({ workspaceId, invitationId: invitation.id }, 'invitation email not delivered');
+    }
+
+    // The token only ever leaves the server under the log transport, where there
+    // is no inbox to read it from. Returning it under a real transport would make
+    // this endpoint a way to mint a membership link for any address.
+    return {
+      inviteId: invitation.id,
+      expiresAt,
+      delivered: result.delivered,
+      ...(result.previewUrl ? { token } : {}),
+    };
   }
 
   async listInvitations(workspaceId: string) {

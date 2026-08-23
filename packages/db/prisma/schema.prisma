@@ -181,6 +181,7 @@ model User {
   assignedConvs Conversation[]    @relation("ConversationAssignee")
   notes         ConversationNote[]
   passwordResets PasswordResetToken[]
+  emailVerifications EmailVerificationToken[]
 
   @@index([email])
 }
@@ -204,6 +205,25 @@ model Session {
 model PasswordResetToken {
   id        String    @id
   userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Proves the person signing up can read the address they claimed. Stored as a
+/// hash like every other opaque token, so a database dump does not hand out
+/// working verification links.
+model EmailVerificationToken {
+  id        String    @id
+  userId    String
+  /// The address being proven. Kept alongside the user so a token issued for one
+  /// address cannot verify a different one after an email change.
+  email     String
   tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?

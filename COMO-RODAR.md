@@ -122,6 +122,34 @@ docker compose down -v
 
 ---
 
+## Sobre os e-mails
+
+Rodando na sua máquina, a plataforma **não envia e-mail de verdade**. Ela escreve
+a mensagem no log e devolve o link direto na tela. Isso vale para:
+
+- confirmação de e-mail no cadastro,
+- convite de pessoa para o workspace,
+- redefinição de senha.
+
+Na prática: quando você criar a conta, vai aparecer um aviso amarelo no topo
+pedindo para confirmar o e-mail. Clique em **Reenviar e-mail** — o link de
+confirmação sai no log do servidor. Sem confirmar, você navega normalmente, mas
+não consegue publicar automação nem conectar conta.
+
+Quando for colocar no ar de verdade, é só preencher no `.env`:
+
+```
+MAIL_TRANSPORT=smtp
+SMTP_URL=smtps://usuario:senha@smtp.seuprovedor.com:465
+MAIL_FROM=nao-responda@seudominio.com
+```
+
+A API **não sobe em produção** sem isso. É de propósito: um sistema que engole a
+redefinição de senha em silêncio é pior do que um que avisa que está mal
+configurado.
+
+---
+
 ## Uma coisa importante sobre o Instagram
 
 O Instagram que vem ligado é **simulado**. Ele reproduz fielmente o formato de uma
