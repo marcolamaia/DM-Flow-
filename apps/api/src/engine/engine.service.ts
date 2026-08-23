@@ -309,6 +309,34 @@ export class EngineService {
         return false;
       }
 
+      case 'await_reply': {
+        await this.prisma.executionStep.update({
+          where: { id: stepId },
+          data: {
+            status: 'RUNNING',
+            output: (outcome.output ?? {}) as never,
+          },
+        });
+
+        // The run stays parked ON this node, not on the next one: which exit it
+        // eventually takes depends on what the contact says, and that is not
+        // known yet. resumeAt carries the deadline so the sweeper can take the
+        // timeout path if nobody ever answers.
+        await this.prisma.execution.updateMany({
+          where: { id: executionId, lockVersion },
+          data: {
+            status: 'WAITING',
+            currentNodeId: node.id,
+            awaitingReplyNodeId: node.id,
+            resumeAt: outcome.timeoutAt,
+            stepCount: { increment: 1 },
+            attemptCount: 0,
+            lockVersion: { increment: 1 },
+          },
+        });
+        return false;
+      }
+
       case 'handoff': {
         // The other automation starts as its own run, pinned to its own published
         // version. Nesting one flow's steps inside another would make a change to
@@ -486,16 +514,44 @@ export class EngineService {
   async wakeDueExecutions(limit = 200): Promise<number> {
     const due = await this.prisma.execution.findMany({
       where: { status: 'WAITING', resumeAt: { lte: new Date() } },
-      select: { id: true, lockVersion: true },
+      select: {
+        id: true,
+        lockVersion: true,
+        awaitingReplyNodeId: true,
+        automationVersion: { select: { graph: true } },
+      },
       take: limit,
       orderBy: { resumeAt: 'asc' },
     });
 
     let woken = 0;
     for (const execution of due) {
+      // A run parked on "wait for reply" whose deadline passed leaves by the
+      // no-reply exit, not by carrying on where it stood.
+      const next = execution.awaitingReplyNodeId
+        ? this.nextNodeId(
+            flowGraphSchema.parse(execution.automationVersion.graph) as FlowGraph,
+            execution.awaitingReplyNodeId,
+            'timeout',
+          )
+        : undefined;
+
+      if (execution.awaitingReplyNodeId && !next) {
+        // Nothing connected to the no-reply exit: the contact simply leaves.
+        await this.completeExecution(execution.id, execution.lockVersion, 'reply_timeout');
+        woken += 1;
+        continue;
+      }
+
       const updated = await this.prisma.execution.updateMany({
         where: { id: execution.id, lockVersion: execution.lockVersion, status: 'WAITING' },
-        data: { status: 'RUNNING', resumeAt: null, lockVersion: { increment: 1 } },
+        data: {
+          status: 'RUNNING',
+          resumeAt: null,
+          awaitingReplyNodeId: null,
+          ...(next ? { currentNodeId: next } : {}),
+          lockVersion: { increment: 1 },
+        },
       });
       if (updated.count === 1) {
         await this.queue.enqueueExecution(execution.id, 'resume');
@@ -505,4 +561,128 @@ export class EngineService {
 
     return woken;
   }
+
+  /**
+   * Resumes runs parked on a "wait for reply" block in this conversation.
+   *
+   * Called when a message arrives from the contact. Which exit each run takes is
+   * decided here, from its own block's options, because two runs parked on
+   * different blocks may read the same message differently.
+   */
+  async deliverReply(input: {
+    workspaceId: string;
+    conversationId: string;
+    text: string;
+    quickReplyPayload?: string | null;
+  }): Promise<number> {
+    const waiting = await this.prisma.execution.findMany({
+      where: {
+        workspaceId: input.workspaceId,
+        conversationId: input.conversationId,
+        status: 'WAITING',
+        awaitingReplyNodeId: { not: null },
+      },
+      select: {
+        id: true,
+        lockVersion: true,
+        awaitingReplyNodeId: true,
+        variables: true,
+        automationVersion: { select: { graph: true } },
+      },
+      take: 20,
+    });
+
+    let resumed = 0;
+    for (const execution of waiting) {
+      const graph = flowGraphSchema.parse(execution.automationVersion.graph) as FlowGraph;
+      const node = graph.nodes.find((entry) => entry.id === execution.awaitingReplyNodeId);
+      if (!node) continue;
+
+      const handle = matchReply(node, input.text, input.quickReplyPayload ?? null);
+      const next = this.nextNodeId(graph, node.id, handle);
+
+      if (!next) {
+        await this.completeExecution(execution.id, execution.lockVersion, 'reply_exit_unconnected');
+        resumed += 1;
+        continue;
+      }
+
+      const updated = await this.prisma.execution.updateMany({
+        where: { id: execution.id, lockVersion: execution.lockVersion, status: 'WAITING' },
+        data: {
+          status: 'RUNNING',
+          resumeAt: null,
+          awaitingReplyNodeId: null,
+          currentNodeId: next,
+          // What the contact said is available to every step downstream, which is
+          // the whole point of having asked.
+          variables: {
+            ...((execution.variables ?? {}) as Record<string, unknown>),
+            reply: { text: input.text, option: handle },
+          } as never,
+          attemptCount: 0,
+          lockVersion: { increment: 1 },
+        },
+      });
+
+      if (updated.count === 1) {
+        await this.queue.enqueueExecution(execution.id, 'resume');
+        resumed += 1;
+      }
+    }
+
+    if (resumed > 0) {
+      logger.info(
+        { conversationId: input.conversationId, resumed },
+        'resumed executions waiting on a reply',
+      );
+    }
+    return resumed;
+  }
+}
+
+/**
+ * Which exit a reply takes.
+ *
+ * Options are checked in the order the operator arranged them, so overlapping
+ * keywords resolve predictably rather than by whichever matched first in some
+ * internal order. A tapped button wins over typed text: it is the stronger
+ * signal, and the contact chose it deliberately.
+ */
+function matchReply(
+  node: FlowNode,
+  text: string,
+  quickReplyPayload: string | null,
+): string {
+  const options = (node.config?.options ?? []) as Array<{
+    id: string;
+    match: { kind: string; payload?: string; keywords?: string[] };
+  }>;
+
+  if (quickReplyPayload) {
+    const tapped = options.find(
+      (option) => option.match.kind === 'quick_reply' && option.match.payload === quickReplyPayload,
+    );
+    if (tapped) return tapped.id;
+  }
+
+  const normalized = normalizeForMatch(text);
+  for (const option of options) {
+    if (option.match.kind !== 'keywords') continue;
+    const keywords = option.match.keywords ?? [];
+    if (keywords.some((keyword) => normalized.includes(normalizeForMatch(keyword)))) {
+      return option.id;
+    }
+  }
+
+  return 'any';
+}
+
+/** Accent- and case-insensitive, so "SIM" and "sim" reach the same path. */
+function normalizeForMatch(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }

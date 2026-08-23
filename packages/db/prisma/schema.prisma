@@ -736,6 +736,10 @@ model Execution {
   currentNodeId       String?
   variables           Json            @default("{}")
   resumeAt            DateTime?
+  /// Set while the run is parked on a "wait for reply" block. Indexed with the
+  /// conversation so an inbound message can find what it should wake, without
+  /// scanning every waiting execution in the workspace.
+  awaitingReplyNodeId String?
   stepCount           Int             @default(0)
   attemptCount        Int             @default(0)
   // Optimistic-lock token; incremented on every persisted engine transition
@@ -756,6 +760,7 @@ model Execution {
 
   @@index([workspaceId, automationId, startedAt(sort: Desc)])
   @@index([status, resumeAt])
+  @@index([conversationId, awaitingReplyNodeId])
   @@index([workspaceId, contactId])
   @@index([automationId, status])
 }

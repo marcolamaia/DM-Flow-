@@ -25,6 +25,10 @@ const base = {
   },
   occurredAt: new Date().toISOString(),
   text,
+  // Simulates the contact tapping a quick reply rather than typing. The live
+  // channel may or may not report this; here it lets button routing be exercised
+  // end to end.
+  ...(process.env.SIM_QUICK_REPLY ? { quickReplyPayload: process.env.SIM_QUICK_REPLY } : {}),
 };
 
 const events: Record<string, Record<string, unknown>> = {

@@ -47,6 +47,8 @@ const COPY = {
   'pt-BR': {
     noText: 'Sem texto ainda',
     noTrigger: 'Nenhum gatilho configurado',
+    listensForNothing: 'Não espera nenhuma resposta específica',
+    givesUpAfter: 'desiste depois de',
     disabled: 'desligado',
     privateReply: 'Resposta privada ao comentário',
     chooseTag: 'Escolha uma tag',
@@ -70,6 +72,8 @@ const COPY = {
   en: {
     noText: 'No text yet',
     noTrigger: 'No trigger configured',
+    listensForNothing: 'Listens for no particular answer',
+    givesUpAfter: 'gives up after',
     disabled: 'off',
     privateReply: 'Private reply to the comment',
     chooseTag: 'Choose a tag',
@@ -145,6 +149,18 @@ export function previewOf(
         media: media.length > 0 ? media : undefined,
         chips: quickReplies.map((reply) => reply.title ?? '').filter(Boolean),
         incomplete: !text && media.length === 0,
+      };
+    }
+
+    case 'wait_for_reply': {
+      const options = (config.options ?? []) as Array<{ label?: string }>;
+      const unit = String(config.timeoutUnit ?? 'days') as 'minutes' | 'hours' | 'days';
+
+      return {
+        text: options.length === 0 ? c.listensForNothing : undefined,
+        chips: options.map((option, index) => option.label || `${index + 1}`),
+        detail: `${c.givesUpAfter} ${config.timeoutAmount ?? 1} ${c[unit]}`,
+        incomplete: options.length === 0,
       };
     }
 

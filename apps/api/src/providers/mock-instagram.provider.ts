@@ -155,6 +155,11 @@ export class MockInstagramProvider implements ChannelProvider {
         },
         occurredAt: e.occurredAt ? new Date(String(e.occurredAt)) : new Date(),
         text: e.text ? String(e.text) : undefined,
+        // Simulated here so button routing can be exercised end to end. The live
+        // provider will only carry this once the platform's webhook is confirmed
+        // to report which quick reply was tapped — until then that capability
+        // stays unvalidated and the builder refuses to route on it.
+        quickReplyPayload: e.quickReplyPayload ? String(e.quickReplyPayload) : undefined,
         raw: e,
       };
 

@@ -26,6 +26,7 @@ export function Inspector({
   fields,
   members,
   automations,
+  capabilities,
   onChange,
   onDelete,
 }: {
@@ -35,6 +36,8 @@ export function Inspector({
   members: Array<{ userId: string; name: string }>;
   /** Other automations this flow may hand a contact to. */
   automations: Array<{ id: string; name: string }>;
+  /** Channel capabilities, so an option cannot be offered that cannot work. */
+  capabilities: Array<{ id: string; available: boolean }>;
   onChange: (config: Record<string, unknown>) => void;
   onDelete: () => void;
 }) {
@@ -169,6 +172,8 @@ export function Inspector({
               onChange={(e) => set({ message: e.target.value })}
             />
           </Field>
+        ) : node.type === 'wait_for_reply' ? (
+          <WaitForReplyConfig config={node.config} set={set} capabilities={capabilities} />
         ) : node.type === 'randomizer' ? (
           <RandomizerConfig config={node.config} set={set} />
         ) : node.type === 'start_automation' ? (
@@ -630,6 +635,171 @@ function StartAutomationConfig({
           </span>
         </span>
       </label>
+    </div>
+  );
+}
+
+
+interface ReplyOption {
+  id: string;
+  label: string;
+  match:
+    | { kind: 'quick_reply'; payload: string }
+    | { kind: 'keywords'; keywords: string[] };
+}
+
+/**
+ * Options the flow listens for, each one an exit on the canvas.
+ *
+ * Routing on a tapped button is offered only when the channel is known to report
+ * which button it was. Receiving the message does not imply knowing what caused
+ * it, and offering a control that silently never matches would be worse than not
+ * offering it at all.
+ */
+function WaitForReplyConfig({
+  config,
+  set,
+  capabilities,
+}: {
+  config: Record<string, unknown>;
+  set: (patch: Record<string, unknown>) => void;
+  capabilities: Array<{ id: string; available: boolean }>;
+}) {
+  const { t, locale } = useI18n();
+  const options = (config.options ?? []) as ReplyOption[];
+
+  const canRouteByButton = capabilities.some(
+    (entry) => entry.id === 'CAP_IG_RECEIVE_QUICK_REPLY_PAYLOAD' && entry.available,
+  );
+
+  const update = (next: ReplyOption[]) => set({ options: next });
+
+  return (
+    <div className="space-y-3">
+      {options.map((option, index) => (
+        <div key={option.id} className="rounded-lg border border-border p-2.5">
+          <div className="flex items-end gap-2">
+            <Field label={`${t('builder.option')} ${index + 1}`} className="flex-1">
+              <Input
+                value={option.label}
+                onChange={(e) =>
+                  update(
+                    options.map((entry) =>
+                      entry.id === option.id ? { ...entry, label: e.target.value } : entry,
+                    ),
+                  )
+                }
+              />
+            </Field>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('common.remove')}
+              onClick={() => update(options.filter((entry) => entry.id !== option.id))}
+            >
+              <Trash2 />
+            </Button>
+          </div>
+
+          <Field label={t('builder.matchBy')} className="mt-2">
+            <Select
+              value={option.match.kind}
+              onChange={(e) =>
+                update(
+                  options.map((entry) =>
+                    entry.id === option.id
+                      ? {
+                          ...entry,
+                          match:
+                            e.target.value === 'quick_reply'
+                              ? { kind: 'quick_reply', payload: entry.id }
+                              : { kind: 'keywords', keywords: [] },
+                        }
+                      : entry,
+                  ),
+                )
+              }
+            >
+              <option value="keywords">{t('builder.matchKeywords')}</option>
+              <option value="quick_reply" disabled={!canRouteByButton}>
+                {t('builder.matchButton')}
+                {canRouteByButton ? '' : ` — ${t('builder.matchButtonUnavailable')}`}
+              </option>
+            </Select>
+          </Field>
+
+          {option.match.kind === 'keywords' ? (
+            <Field label={t('builder.keywords')} hint={t('builder.keywordsHint')} className="mt-2">
+              <Input
+                value={option.match.keywords.join(', ')}
+                onChange={(e) =>
+                  update(
+                    options.map((entry) =>
+                      entry.id === option.id
+                        ? {
+                            ...entry,
+                            match: {
+                              kind: 'keywords',
+                              keywords: e.target.value
+                                .split(',')
+                                .map((word) => word.trim())
+                                .filter(Boolean),
+                            },
+                          }
+                        : entry,
+                    ),
+                  )
+                }
+              />
+            </Field>
+          ) : null}
+        </div>
+      ))}
+
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={options.length >= 13}
+        onClick={() =>
+          update([
+            ...options,
+            {
+              id: `o${Date.now().toString(36)}`,
+              label: '',
+              match: { kind: 'keywords', keywords: [] },
+            },
+          ])
+        }
+      >
+        {t('builder.addOption')}
+      </Button>
+
+      <div className="flex items-end gap-2 border-t border-border pt-3">
+        <Field label={t('builder.giveUpAfter')} className="flex-1">
+          <Input
+            type="number"
+            min={1}
+            max={60}
+            value={String(config.timeoutAmount ?? 1)}
+            onChange={(e) => set({ timeoutAmount: Number(e.target.value) || 1 })}
+          />
+        </Field>
+        <Field label={t('builder.delayUnit')} className="w-[120px]">
+          <Select
+            value={String(config.timeoutUnit ?? 'days')}
+            onChange={(e) => set({ timeoutUnit: e.target.value })}
+          >
+            <option value="minutes">{t('builder.minutes')}</option>
+            <option value="hours">{t('builder.hours')}</option>
+            <option value="days">{t('builder.days')}</option>
+          </Select>
+        </Field>
+      </div>
+      <p className="text-[11px] leading-snug text-subtle">
+        {locale === 'en'
+          ? 'A contact who never answers leaves through the "No reply" exit.'
+          : 'Quem nunca responder sai pela saída "Não respondeu".'}
+      </p>
     </div>
   );
 }

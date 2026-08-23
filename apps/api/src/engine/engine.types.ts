@@ -24,6 +24,14 @@ export interface ExecutionContextData {
 export type NodeOutcome =
   | { kind: 'continue'; handle?: string | null; output?: Record<string, unknown> }
   | { kind: 'wait'; resumeAt: Date; output?: Record<string, unknown> }
+  /**
+   * Park the run until the contact answers, or until the deadline passes.
+   *
+   * Distinct from 'wait': a delay resumes on time alone, whereas this resumes on
+   * whichever comes first — a message arriving, or the timeout — and takes a
+   * different exit depending on which one it was.
+   */
+  | { kind: 'await_reply'; timeoutAt: Date; output?: Record<string, unknown> }
   | { kind: 'end'; output?: Record<string, unknown> }
   /**
    * Hand the contact to another automation.

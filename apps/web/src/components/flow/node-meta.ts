@@ -6,6 +6,7 @@ import {
   GitBranch,
   Globe,
   MessageSquare,
+  MessagesSquare,
   Minus,
   Plus,
   Shuffle,
@@ -43,6 +44,13 @@ export const NODE_META: Record<string, NodeMeta> = {
     tone: 'text-warning',
     labelPt: 'Randomizador',
     labelEn: 'Randomizer',
+    category: 'logic',
+  },
+  wait_for_reply: {
+    icon: MessagesSquare,
+    tone: 'text-warning',
+    labelPt: 'Aguardar resposta',
+    labelEn: 'Wait for reply',
     category: 'logic',
   },
   start_automation: {

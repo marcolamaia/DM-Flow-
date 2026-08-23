@@ -166,6 +166,20 @@ export class IngestionService {
       await this.persistInboundMessage(workspaceId, conversation.id, event);
     }
 
+    // A reply the flow is already waiting for takes precedence over starting
+    // something new. Otherwise answering "yes" to one automation would enrol the
+    // contact in a second one that happens to listen for the same word, and they
+    // would get two conversations at once from a single message.
+    if (event.text !== undefined) {
+      const resumed = await this.engine.deliverReply({
+        workspaceId,
+        conversationId: conversation.id,
+        text: event.text ?? '',
+        quickReplyPayload: event.quickReplyPayload ?? null,
+      });
+      if (resumed > 0) return { workspaceId };
+    }
+
     const outcome = await this.matcher.match(workspaceId, account.id, event);
 
     if (!outcome.selected) {

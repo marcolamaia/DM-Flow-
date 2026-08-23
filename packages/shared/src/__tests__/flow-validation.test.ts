@@ -246,6 +246,68 @@ describe('flow validation', () => {
     expect(issue?.message['pt-BR']).toContain('100%');
   });
 
+  it('refuses to route on a tapped button when the channel cannot report which one', () => {
+    // Receiving the message does not imply knowing which button caused it. Until
+    // that is confirmed, offering button routing would produce a path that
+    // silently never runs.
+    const wait = {
+      id: 'w',
+      type: 'wait_for_reply' as const,
+      position: { x: 0, y: 0 },
+      config: {
+        options: [
+          { id: 'a', label: 'Quero', match: { kind: 'quick_reply', payload: 'btn_a' } },
+        ],
+        timeoutAmount: 1,
+        timeoutUnit: 'days',
+      },
+    };
+    const report = validateFlow(
+      graph(
+        [trigger, wait, end],
+        [
+          { id: 'e1', source: 't', target: 'w', sourceHandle: null },
+          { id: 'e2', source: 'w', target: 'e', sourceHandle: 'a' },
+          { id: 'e3', source: 'w', target: 'e', sourceHandle: 'any' },
+          { id: 'e4', source: 'w', target: 'e', sourceHandle: 'timeout' },
+        ],
+      ),
+      ctx({ availableCapabilities: new Set([CAP.IG_SEND_TEXT, CAP.IG_RECEIVE_DM]) }),
+    );
+
+    expect(report.issues.map((i) => i.code)).toContain('QUICK_REPLY_ROUTING_UNAVAILABLE');
+    expect(report.valid).toBe(false);
+  });
+
+  it('allows keyword routing on the same block, which needs no such capability', () => {
+    const wait = {
+      id: 'w',
+      type: 'wait_for_reply' as const,
+      position: { x: 0, y: 0 },
+      config: {
+        options: [
+          { id: 'a', label: 'Quero', match: { kind: 'keywords', keywords: ['quero'] } },
+        ],
+        timeoutAmount: 1,
+        timeoutUnit: 'days',
+      },
+    };
+    const report = validateFlow(
+      graph(
+        [trigger, wait, end],
+        [
+          { id: 'e1', source: 't', target: 'w', sourceHandle: null },
+          { id: 'e2', source: 'w', target: 'e', sourceHandle: 'a' },
+          { id: 'e3', source: 'w', target: 'e', sourceHandle: 'any' },
+          { id: 'e4', source: 'w', target: 'e', sourceHandle: 'timeout' },
+        ],
+      ),
+      ctx({ availableCapabilities: new Set([CAP.IG_SEND_TEXT, CAP.IG_RECEIVE_DM]) }),
+    );
+
+    expect(report.issues.map((i) => i.code)).not.toContain('QUICK_REPLY_ROUTING_UNAVAILABLE');
+  });
+
   it('refuses an automation that starts itself', () => {
     const handoff = {
       id: 'h',

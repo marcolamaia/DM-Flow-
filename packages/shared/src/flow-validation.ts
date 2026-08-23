@@ -5,6 +5,7 @@ import {
   type FlowNode,
   type NodeType,
 } from './flow.js';
+import { CAP } from './capabilities.js';
 import { extractTokens } from './interpolate.js';
 import {
   CONNECTION_REJECTION_MESSAGES,
@@ -149,6 +150,18 @@ function describeConfigIssue(
     return {
       'pt-BR': 'Escreva o texto da mensagem ou anexe uma mídia.',
       en: 'Write the message text or attach media.',
+    };
+  }
+  if (type === 'wait_for_reply' && field === 'options') {
+    // The path tells us which part of the option is unfinished: its name, or the
+    // words it is meant to recognise.
+    const part = issue.path[2];
+    if (part === 'label') {
+      return { 'pt-BR': 'Dê um nome a cada opção.', en: 'Name every option.' };
+    }
+    return {
+      'pt-BR': 'Cada opção precisa de pelo menos uma palavra-chave.',
+      en: 'Every option needs at least one keyword.',
     };
   }
   if (field === 'branches') {
@@ -372,6 +385,44 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
                 node.id,
               ),
       );
+    }
+
+    if (node.type === 'wait_for_reply' && parsed.success) {
+      const config = parsed.data as {
+        options: Array<{ id: string; label: string; match: { kind: string } }>;
+      };
+
+      if (config.options.length === 0) {
+        issues.push(
+          warn(
+            'WAIT_FOR_REPLY_NO_OPTIONS',
+            {
+              'pt-BR':
+                'Este bloco não espera nenhuma resposta específica. Toda resposta vai cair em "Qualquer outra resposta".',
+              en: 'This block listens for no particular answer. Every reply will land on "Any other reply".',
+            },
+            node.id,
+          ),
+        );
+      }
+
+      // Routing on which button was tapped is a separate capability from
+      // receiving the message. Refusing the individual option, rather than the
+      // whole block, keeps keyword routing usable while the other is unconfirmed.
+      const needsPayload = config.options.some((option) => option.match.kind === 'quick_reply');
+      if (needsPayload && !ctx.availableCapabilities.has(CAP.IG_RECEIVE_QUICK_REPLY_PAYLOAD)) {
+        issues.push(
+          err(
+            'QUICK_REPLY_ROUTING_UNAVAILABLE',
+            {
+              'pt-BR':
+                'Para separar os caminhos por botão, o canal precisa informar qual botão foi tocado — e isso ainda não foi validado para esta conexão. Use palavras-chave enquanto isso.',
+              en: 'Routing by button needs the channel to report which button was tapped, and that is not validated for this connection yet. Use keywords in the meantime.',
+            },
+            node.id,
+          ),
+        );
+      }
     }
 
     if (node.type === 'start_automation' && parsed.success) {

@@ -57,6 +57,8 @@ export class NodeExecutorsService {
         return this.branch(config, ctx);
       case 'randomizer':
         return this.randomizer(node, config);
+      case 'wait_for_reply':
+        return this.waitForReply(config, ctx);
       case 'start_automation':
         return this.startAutomation(config);
       case 'delay':
@@ -372,6 +374,38 @@ export class NodeExecutorsService {
     // Only reachable through floating-point drift at the very end of the range.
     const last = paths[paths.length - 1]!;
     return { kind: 'continue', handle: last.id, output: { chose: last.id } };
+  }
+
+  /**
+   * Parks the run until the contact answers.
+   *
+   * Needs a conversation: without one there is no channel the reply could arrive
+   * on, so the run would wait for something that can never happen. Failing here
+   * is far better than a contact silently stuck until the timeout.
+   */
+  private waitForReply(
+    config: Record<string, unknown>,
+    ctx: ExecutionContextData,
+  ): NodeOutcome {
+    if (!ctx.conversationId) {
+      return {
+        kind: 'fail',
+        errorCode: 'CONVERSATION_REQUIRED',
+        errorDetail: { reason: 'waiting for a reply needs a conversation to receive it on' },
+        retryable: false,
+      };
+    }
+
+    const amount = Number(config.timeoutAmount ?? 1);
+    const unit = String(config.timeoutUnit ?? 'days');
+    const ms =
+      unit === 'minutes' ? amount * 60_000 : unit === 'hours' ? amount * 3_600_000 : amount * 86_400_000;
+
+    return {
+      kind: 'await_reply',
+      timeoutAt: new Date(Date.now() + ms),
+      output: { waitingUntil: new Date(Date.now() + ms).toISOString() },
+    };
   }
 
   private startAutomation(config: Record<string, unknown>): NodeOutcome {

@@ -16,6 +16,7 @@ export const NODE_TYPES = [
   'condition',
   'branch',
   'randomizer',
+  'wait_for_reply',
   'delay',
   'add_tag',
   'remove_tag',
@@ -79,6 +80,46 @@ export const branchConfig = z.object({
     )
     .min(1)
     .max(10),
+});
+
+/**
+ * Waits for the contact to answer, and routes on what they said.
+ *
+ * Every option becomes its own exit, which is what makes a message with buttons
+ * a real fork in the flow rather than a decoration. Two ways to recognise an
+ * answer, deliberately separate:
+ *
+ * - `quick_reply` routes on the identifier of the button that was tapped. That
+ *   requires the channel to deliver such an identifier, which is a capability of
+ *   its own — receiving the message does not imply knowing which button caused it.
+ * - `keywords` routes on what the contact typed, which works on any channel that
+ *   delivers inbound text.
+ */
+export const waitForReplyConfig = z.object({
+  options: z
+    .array(
+      z.object({
+        id: z.string().min(1).max(64),
+        label: z.string().min(1).max(60),
+        match: z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('quick_reply'), payload: z.string().min(1).max(64) }),
+          z.object({
+            kind: z.literal('keywords'),
+            keywords: z.array(z.string().min(1).max(60)).min(1).max(20),
+          }),
+        ]),
+      }),
+    )
+    .max(13)
+    .default([]),
+  /**
+   * How long to wait before giving up.
+   *
+   * Required, and capped: an execution parked forever holds a contact inside a
+   * flow nobody can see, and no amount of waiting makes a silent contact answer.
+   */
+  timeoutAmount: z.number().int().min(1).max(60).default(1),
+  timeoutUnit: z.enum(['minutes', 'hours', 'days']).default('days'),
 });
 
 export const randomizerConfig = z
@@ -172,6 +213,7 @@ export const NODE_CONFIG_SCHEMAS: Record<NodeType, z.ZodTypeAny> = {
   condition: conditionConfig,
   branch: branchConfig,
   randomizer: randomizerConfig,
+  wait_for_reply: waitForReplyConfig,
   delay: delayConfig,
   add_tag: addTagConfig,
   remove_tag: removeTagConfig,
@@ -304,6 +346,20 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'logic',
     requiredCapabilities: [],
+    terminal: false,
+  },
+  wait_for_reply: {
+    type: 'wait_for_reply',
+    label: { 'pt-BR': 'Aguardar resposta', en: 'Wait for reply' },
+    description: {
+      'pt-BR': 'Espera o contato responder e segue por um caminho diferente para cada resposta.',
+      en: 'Waits for the contact to answer and takes a different path for each answer.',
+    },
+    category: 'logic',
+    // Receiving the reply at all is the floor. Routing by which button was tapped
+    // needs a second capability, checked per option when the flow is validated —
+    // an option that needs it is refused, not the whole block.
+    requiredCapabilities: [CAP.IG_RECEIVE_DM],
     terminal: false,
   },
   delay: {
@@ -462,6 +518,8 @@ export function defaultNodeConfig(type: NodeType): Record<string, unknown> {
           { id: 'b', label: 'B', weight: 50 },
         ],
       };
+    case 'wait_for_reply':
+      return { options: [], timeoutAmount: 1, timeoutUnit: 'days' };
     case 'delay':
       return {
         mode: 'duration',

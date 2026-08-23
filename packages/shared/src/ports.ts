@@ -44,6 +44,11 @@ const YES: LocalizedMessage = { 'pt-BR': 'Sim', en: 'Yes' };
 const NO: LocalizedMessage = { 'pt-BR': 'Não', en: 'No' };
 const NEXT: LocalizedMessage = { 'pt-BR': 'Próximo', en: 'Next' };
 const OTHERWISE: LocalizedMessage = { 'pt-BR': 'Nenhuma acima', en: 'None of the above' };
+const ANY_REPLY: LocalizedMessage = {
+  'pt-BR': 'Qualquer outra resposta',
+  en: 'Any other reply',
+};
+const NO_REPLY: LocalizedMessage = { 'pt-BR': 'Não respondeu', en: 'No reply' };
 
 /** The ordinary shape: one way in, one way on. */
 const SEQUENTIAL: PortLayout = {
@@ -121,6 +126,30 @@ export function portsOf(node: Pick<FlowNode, 'type' | 'config'>): PortLayout {
         maxConnections: 1,
         dynamic: true,
       })),
+    };
+  }
+
+  if (node.type === 'wait_for_reply') {
+    const options = (node.config?.options ?? []) as Array<{ id: string; label?: string }>;
+    return {
+      acceptsInput: true,
+      maxInputs: Number.POSITIVE_INFINITY,
+      outputs: [
+        ...options.map((option, index) => ({
+          id: option.id,
+          label: {
+            'pt-BR': option.label || `Opção ${index + 1}`,
+            en: option.label || `Option ${index + 1}`,
+          },
+          maxConnections: 1,
+          dynamic: true,
+        })),
+        // The contact answered, but not with anything we were listening for.
+        { id: 'any', label: ANY_REPLY, maxConnections: 1, fallback: true },
+        // Nobody answered at all. A separate path, because "said something else"
+        // and "went quiet" usually deserve different follow-ups.
+        { id: 'timeout', label: NO_REPLY, maxConnections: 1 },
+      ],
     };
   }
 

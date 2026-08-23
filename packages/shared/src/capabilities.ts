@@ -78,6 +78,7 @@ export const CAP = {
   IG_SEND_TEXT: 'CAP_IG_SEND_TEXT',
   IG_SEND_MEDIA: 'CAP_IG_SEND_MEDIA',
   IG_SEND_QUICK_REPLIES: 'CAP_IG_SEND_QUICK_REPLIES',
+  IG_RECEIVE_QUICK_REPLY_PAYLOAD: 'CAP_IG_RECEIVE_QUICK_REPLY_PAYLOAD',
   IG_SEND_BUTTONS: 'CAP_IG_SEND_BUTTONS',
   IG_RECEIVE_COMMENT: 'CAP_IG_RECEIVE_COMMENT',
   IG_REPLY_COMMENT_PUBLIC: 'CAP_IG_REPLY_COMMENT_PUBLIC',
@@ -167,6 +168,23 @@ const IG_SEEDS: CapSeed[] = [
     idempotency: 'PER_EXECUTION_NODE',
     pendingQuestion: 'Q16, Q17: how many quick replies, and whether they render outside mobile.',
     sandbox: { documentedLimits: { maxQuickReplies: 3, maxTitleLength: 20 } },
+  },
+  {
+    id: CAP.IG_RECEIVE_QUICK_REPLY_PAYLOAD,
+    label: {
+      'pt-BR': 'Saber qual resposta rápida foi tocada',
+      en: 'Know which quick reply was tapped',
+    },
+    limitations: {
+      'pt-BR':
+        'Receber a mensagem é uma coisa; saber QUAL botão foi tocado é outra. Rotear por botão só é possível se o webhook entregar um identificador da opção escolhida, e não apenas o texto dela.',
+      en: 'Receiving the message is one thing; knowing WHICH button was tapped is another. Routing by button is only possible if the webhook delivers an identifier for the chosen option, not merely its text.',
+    },
+    windowRequirement: 'NONE',
+    idempotency: 'NONE',
+    pendingQuestion:
+      'Q16, Q18: does the inbound webhook carry a payload identifying the quick reply that was tapped, and is it distinguishable from the contact typing the same words?',
+    sandbox: {},
   },
   {
     id: CAP.IG_SEND_BUTTONS,

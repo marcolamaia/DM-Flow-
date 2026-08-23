@@ -1358,6 +1358,7 @@ function Builder() {
             fields={fields.data ?? []}
             members={members.data ?? []}
             automations={automations.data ?? []}
+            capabilities={capabilities.data ?? []}
             onChange={updateSelectedConfig}
             onDelete={deleteSelection}
           />

@@ -31,6 +31,12 @@ export interface NormalizedEvent {
   occurredAt: Date;
   /** Text payload where the event carries one. */
   text?: string;
+  /**
+   * Identifier of the quick reply the contact tapped, when the channel reports
+   * one. Absent is meaningful: it means the channel did not say, not that the
+   * contact typed — the two are different and must not be conflated.
+   */
+  quickReplyPayload?: string;
   externalMessageId?: string;
   externalConversationId?: string;
   /** Comment events carry the comment and its parent media. */
