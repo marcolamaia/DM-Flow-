@@ -2,7 +2,7 @@
 
 import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Users } from 'lucide-react';
+import { Tags, Users } from 'lucide-react';
 import { ApiError, get } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
@@ -17,7 +17,10 @@ import {
   Select,
   Skeleton,
 } from '@/components/ui/primitives';
+import Link from 'next/link';
 import { relativeTime } from '@/lib/utils';
+import { ContactDrawer } from '@/components/contacts/contact-drawer';
+import { Button } from '@/components/ui/primitives';
 import type { Contact, Tag } from '@/lib/types';
 
 export default function ContactsPage() {
@@ -25,6 +28,7 @@ export default function ContactsPage() {
   const { workspaceId } = useApp();
 
   const [search, setSearch] = React.useState('');
+  const [openContactId, setOpenContactId] = React.useState<string | null>(null);
   const [tagId, setTagId] = React.useState('');
   const [status, setStatus] = React.useState('');
 
@@ -53,9 +57,15 @@ export default function ContactsPage() {
         title={t('contacts.title')}
         subtitle={t('contacts.subtitle')}
         actions={
-          contacts.data ? (
-            <Badge>{contacts.data.pagination.total}</Badge>
-          ) : null
+          <div className="flex items-center gap-2">
+            {contacts.data ? <Badge>{contacts.data.pagination.total}</Badge> : null}
+            <Link href="/contacts/tags">
+              <Button size="sm" variant="secondary">
+                <Tags className="size-3.5" />
+                {t('tags.title')}
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -119,7 +129,11 @@ export default function ContactsPage() {
                 </thead>
                 <tbody className="divide-y divide-border">
                   {contacts.data?.data.map((contact) => (
-                    <tr key={contact.id} className="hover:bg-elevated/50">
+                    <tr
+                      key={contact.id}
+                      onClick={() => setOpenContactId(contact.id)}
+                      className="cursor-pointer hover:bg-elevated/50"
+                    >
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2.5">
                           <Avatar name={contact.displayName} src={contact.avatarUrl} size={28} />
@@ -165,6 +179,14 @@ export default function ContactsPage() {
           )}
         </Card>
       </div>
+
+      {openContactId ? (
+        <ContactDrawer
+          contactId={openContactId}
+          tags={tags.data ?? []}
+          onClose={() => setOpenContactId(null)}
+        />
+      ) : null}
     </>
   );
 }
