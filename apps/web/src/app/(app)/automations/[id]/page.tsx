@@ -37,9 +37,11 @@ import {
   portIdFromHandle,
   type FlowNodeData,
 } from '@/components/flow/flow-node';
-import { Palette } from '@/components/flow/palette';
 import { Inspector } from '@/components/flow/inspector';
 import { NODE_META, nodeLabel } from '@/components/flow/node-meta';
+import { NodeCatalog, useCatalog } from '@/components/flow/node-catalog';
+import { autoLayout } from '@/components/flow/auto-layout';
+import { CanvasToolbar } from '@/components/flow/canvas-toolbar';
 import { cn } from '@/lib/utils';
 import type {
   CapabilityEntry,
@@ -51,6 +53,45 @@ import type {
 } from '@/lib/types';
 
 const nodeTypes: NodeTypes = { dmflow: FlowNode };
+
+const PICKER_WIDTH = 290;
+const PICKER_HEIGHT = 420;
+
+/** Keeps the block picker on screen when it is opened near an edge. */
+function MenuItem({
+  label,
+  shortcut,
+  danger,
+  onClick,
+}: {
+  label: string;
+  shortcut?: string;
+  danger?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex w-full items-center justify-between gap-6 px-3 py-1.5 text-left text-[12.5px] transition-colors hover:bg-elevated',
+        danger ? 'text-danger' : 'text-fg',
+      )}
+    >
+      {label}
+      {shortcut ? <span className="text-[11px] text-subtle">{shortcut}</span> : null}
+    </button>
+  );
+}
+
+function pickerPosition(screen: { x: number; y: number }): React.CSSProperties {
+  if (typeof window === 'undefined') return { left: screen.x, top: screen.y };
+
+  return {
+    left: Math.min(screen.x, window.innerWidth - PICKER_WIDTH - 12),
+    top: Math.min(screen.y, window.innerHeight - PICKER_HEIGHT - 12),
+  };
+}
 
 interface AutomationDetail {
   id: string;
@@ -173,7 +214,7 @@ function Builder() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { screenToFlowPosition } = useReactFlow();
+  const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
 
   /**
    * Undo history. Snapshots are pushed on discrete actions — adding, deleting,
@@ -182,6 +223,8 @@ function Builder() {
    */
   const history = React.useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
   const future = React.useRef<Array<{ nodes: Node[]; edges: Edge[] }>>([]);
+  /** Which exit a connection drag started from, needed when it ends on nothing. */
+  const connectingFrom = React.useRef<{ nodeId: string; handle: string | null } | null>(null);
   const [canUndo, setCanUndo] = React.useState(false);
   const [canRedo, setCanRedo] = React.useState(false);
 
@@ -392,9 +435,10 @@ function Builder() {
   }, [report, locale, setNodes]);
 
   const addNode = React.useCallback(
-    (type: string, position?: { x: number; y: number }) => {
-      snapshot();
-      const id = `${type}-${Date.now().toString(36)}`;
+    (type: string, position?: { x: number; y: number }, options: { record?: boolean } = {}) => {
+      if (options.record !== false) snapshot();
+
+      const id = `${type}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
       const last = nodes.at(-1);
       const placement =
         position ?? {
@@ -412,9 +456,172 @@ function Builder() {
         },
       ]);
       setSelectedId(id);
+      return id;
     },
     [nodes, locale, setNodes, snapshot],
   );
+
+  /**
+   * The block picker, opened either from empty canvas or from a dragged exit.
+   *
+   * `from` is what turns picking a block into two steps instead of four: the new
+   * block is created where the drag ended and wired to the exit it came from, so
+   * the operator never has to aim a second connection by hand.
+   */
+  const [picker, setPicker] = React.useState<{
+    screen: { x: number; y: number };
+    flow: { x: number; y: number };
+    from?: { nodeId: string; handle: string | null };
+  } | null>(null);
+
+  const pickFromCatalog = React.useCallback(
+    (type: string) => {
+      if (!picker) return;
+
+      snapshot();
+      const id = addNode(
+        type,
+        { x: picker.flow.x - 118, y: picker.flow.y - 44 },
+        // The snapshot above already covers both the node and the edge, so undo
+        // takes back the whole gesture rather than half of it.
+        { record: false },
+      );
+
+      if (picker.from) {
+        setEdges((current) => [
+          ...current,
+          {
+            id: `e-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            source: picker.from!.nodeId,
+            sourceHandle: handleId(picker.from!.handle),
+            target: id,
+            type: 'smoothstep',
+            animated: true,
+          },
+        ]);
+      }
+
+      setPicker(null);
+    },
+    [picker, addNode, setEdges, snapshot],
+  );
+
+  /**
+   * Where a connection drag ended.
+   *
+   * Ending on empty canvas opens the picker; ending on an occupied or forbidden
+   * target says why. React Flow refuses an invalid connection silently, which
+   * otherwise leaves the operator dragging the same line again and again with no
+   * idea what is wrong.
+   */
+  const onConnectEnd = React.useCallback(
+    (event: MouseEvent | TouchEvent, state: { isValid: boolean | null; fromHandle?: unknown }) => {
+      const source = connectingFrom.current;
+      connectingFrom.current = null;
+      if (!source || state.isValid) return;
+
+      const point =
+        'changedTouches' in event
+          ? { x: event.changedTouches[0]!.clientX, y: event.changedTouches[0]!.clientY }
+          : { x: event.clientX, y: event.clientY };
+
+      const target = document.elementFromPoint(point.x, point.y);
+      const droppedOnCanvas = Boolean(target?.closest('.react-flow__pane'));
+
+      if (droppedOnCanvas) {
+        setPicker({ screen: point, flow: screenToFlowPosition(point), from: source });
+        return;
+      }
+
+      const droppedOnNode = (target as HTMLElement | null)?.closest('.react-flow__node');
+      const targetId = (droppedOnNode as HTMLElement | null)?.dataset.id;
+      if (!targetId) return;
+
+      const check = canConnect(asGraph(nodes, edges), {
+        source: source.nodeId,
+        sourceHandle: source.handle,
+        target: targetId,
+      });
+      if (!check.ok) {
+        toast.error(CONNECTION_REJECTION_MESSAGES[check.reason!][locale === 'en' ? 'en' : 'pt-BR']);
+      }
+    },
+    [nodes, edges, locale, screenToFlowPosition],
+  );
+
+  const onConnectStart = React.useCallback(
+    (
+      _event: unknown,
+      params: { nodeId: string | null; handleId: string | null; handleType: string | null },
+    ) => {
+      connectingFrom.current =
+        params.nodeId && params.handleType === 'source'
+          ? { nodeId: params.nodeId, handle: portIdFromHandle(params.handleId) }
+          : null;
+    },
+    [],
+  );
+
+  /**
+   * Right-click menu. Complementary to the toolbar and the shortcuts, never the
+   * only way to reach an action.
+   */
+  const [contextMenu, setContextMenu] = React.useState<{
+    screen: { x: number; y: number };
+    flow: { x: number; y: number };
+    nodeId?: string;
+  } | null>(null);
+
+  const openContextMenu = React.useCallback(
+    (event: React.MouseEvent, nodeId?: string) => {
+      event.preventDefault();
+      const point = { x: event.clientX, y: event.clientY };
+      if (nodeId) setSelectedId(nodeId);
+      setPicker(null);
+      setContextMenu({ screen: point, flow: screenToFlowPosition(point), nodeId });
+    },
+    [screenToFlowPosition],
+  );
+
+  /**
+   * Double-clicking empty canvas adds a block right where the cursor is.
+   *
+   * Registered natively rather than through React Flow: it exposes no
+   * double-click handler for the canvas, and its zoom behaviour attaches its own
+   * listener to the same element. Capture phase runs before that one.
+   */
+  // Held in a ref so the listener below can stay attached across renders while
+  // still calling the current conversion function.
+  const toFlow = React.useRef(screenToFlowPosition);
+  toFlow.current = screenToFlowPosition;
+
+  const handleDoubleClick = React.useCallback((event: MouseEvent) => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.react-flow__pane')) return;
+    if (target.closest('.react-flow__node')) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const point = { x: event.clientX, y: event.clientY };
+    setPicker({ screen: point, flow: toFlow.current(point) });
+  }, []);
+
+  /**
+   * Attached by callback ref rather than by effect.
+   *
+   * The canvas only exists after the automation has loaded, and an effect that
+   * ran while the loading spinner was on screen would find no element and never
+   * run again.
+   */
+  const canvasRef = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      canvasNode.current?.removeEventListener('dblclick', handleDoubleClick, { capture: true });
+      canvasNode.current = node;
+      node?.addEventListener('dblclick', handleDoubleClick, { capture: true });
+    },
+    [handleDoubleClick],
+  );
+  const canvasNode = React.useRef<HTMLDivElement | null>(null);
 
   /** Drops a palette block at the cursor, converting screen to canvas coordinates. */
   const onDrop = React.useCallback(
@@ -552,37 +759,206 @@ function Builder() {
     [nodes, edges, locale, setEdges, snapshot],
   );
 
-  const deleteSelected = () => {
-    if (!selectedId) return;
+  /**
+   * Removes every selected block, and every connection that touched one.
+   *
+   * Leaving an edge whose block is gone would draw a path to nothing, so the
+   * connections go with the blocks. Undo brings all of it back together.
+   */
+  const deleteSelection = React.useCallback(() => {
+    const doomed = new Set(
+      nodes.filter((node) => node.selected).map((node) => node.id),
+    );
+    if (selectedId) doomed.add(selectedId);
+    // The trigger is the flow's entry point; deleting it would leave a graph
+    // nothing can start.
+    for (const node of nodes) {
+      if ((node.data as FlowNodeData).nodeType === 'trigger') doomed.delete(node.id);
+    }
+    if (doomed.size === 0) return;
+
     snapshot();
-    setNodes((current) => current.filter((node) => node.id !== selectedId));
+    setNodes((current) => current.filter((node) => !doomed.has(node.id)));
     setEdges((current) =>
-      current.filter((edge) => edge.source !== selectedId && edge.target !== selectedId),
+      current.filter((edge) => !doomed.has(edge.source) && !doomed.has(edge.target)),
     );
     setSelectedId(null);
-  };
+  }, [nodes, selectedId, setNodes, setEdges, snapshot]);
+
+  /**
+   * Copies the selected blocks, and only the connections that run between them.
+   *
+   * An edge to a block that was not copied would either point at the original —
+   * silently rewiring a flow the operator did not touch — or at nothing.
+   */
+  const duplicateSelection = React.useCallback(() => {
+    const chosen = nodes.filter(
+      (node) =>
+        (node.selected || node.id === selectedId) &&
+        (node.data as FlowNodeData).nodeType !== 'trigger',
+    );
+    if (chosen.length === 0) return;
+
+    snapshot();
+    const stamp = Date.now().toString(36);
+    const idMap = new Map(chosen.map((node, index) => [node.id, `${node.id}-c${stamp}${index}`]));
+
+    const copies: Node[] = chosen.map((node) => ({
+      ...node,
+      id: idMap.get(node.id)!,
+      // Offset so the copy is visibly a copy rather than hidden under the original.
+      position: { x: node.position.x + 48, y: node.position.y + 48 },
+      selected: true,
+      data: { ...(node.data as FlowNodeData) },
+    }));
+
+    const internal: Edge[] = edges
+      .filter((edge) => idMap.has(edge.source) && idMap.has(edge.target))
+      .map((edge, index) => ({
+        ...edge,
+        id: `e-${stamp}-${index}`,
+        source: idMap.get(edge.source)!,
+        target: idMap.get(edge.target)!,
+      }));
+
+    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...copies]);
+    setEdges((current) => [...current, ...internal]);
+    setSelectedId(copies[0]!.id);
+  }, [nodes, edges, selectedId, setNodes, setEdges, snapshot]);
+
+  /**
+   * Copy and paste, held in memory rather than in the system clipboard.
+   *
+   * A flow node is not text, and serialising it out to the OS clipboard would
+   * mean pasting a wall of JSON into whatever the operator had open next.
+   */
+  const clipboard = React.useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
+
+  const copySelection = React.useCallback(() => {
+    const chosen = nodes.filter(
+      (node) =>
+        (node.selected || node.id === selectedId) &&
+        (node.data as FlowNodeData).nodeType !== 'trigger',
+    );
+    if (chosen.length === 0) return;
+
+    const ids = new Set(chosen.map((node) => node.id));
+    clipboard.current = {
+      nodes: structuredClone(chosen),
+      // Only connections whose both ends are being copied; anything else would
+      // paste a path into a block the operator did not copy.
+      edges: structuredClone(
+        edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)),
+      ),
+    };
+    toast.success(t('builder.copied'));
+  }, [nodes, edges, selectedId, t]);
+
+  const pasteClipboard = React.useCallback(() => {
+    const held = clipboard.current;
+    if (!held || held.nodes.length === 0) return;
+
+    snapshot();
+    const stamp = Date.now().toString(36);
+    const idMap = new Map(held.nodes.map((node, index) => [node.id, `${node.id}-p${stamp}${index}`]));
+
+    const pasted: Node[] = held.nodes.map((node) => ({
+      ...node,
+      id: idMap.get(node.id)!,
+      position: { x: node.position.x + 64, y: node.position.y + 64 },
+      selected: true,
+    }));
+
+    setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...pasted]);
+    setEdges((current) => [
+      ...current,
+      ...held.edges.map((edge, index) => ({
+        ...edge,
+        id: `e-${stamp}-p${index}`,
+        source: idMap.get(edge.source)!,
+        target: idMap.get(edge.target)!,
+      })),
+    ]);
+    setSelectedId(pasted[0]!.id);
+  }, [setNodes, setEdges, snapshot]);
+
+  /**
+   * Tidies the canvas. Positions only — never a connection, never a config.
+   */
+  const organise = React.useCallback(() => {
+    snapshot();
+    setNodes((current) => autoLayout(current, edges));
+    window.setTimeout(() => fitView({ duration: 300, padding: 0.2 }), 30);
+  }, [edges, setNodes, snapshot, fitView]);
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
-      // Never hijack Ctrl+Z while somebody is typing a message into a config field.
+      // Never hijack a shortcut while somebody is typing a message into a config
+      // field: Ctrl+Z there has to mean "undo my typing".
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+
+      if (event.key === 'Escape') {
+        setPicker(null);
+        setContextMenu(null);
+        setSelectedId(null);
+        setNodes((current) => current.map((node) => ({ ...node, selected: false })));
+        return;
+      }
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && !picker) {
+        event.preventDefault();
+        deleteSelection();
+        return;
+      }
+
       if (!(event.metaKey || event.ctrlKey)) return;
 
-      if (event.key.toLowerCase() === 'z') {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-      }
-      if (event.key.toLowerCase() === 'y') {
-        event.preventDefault();
-        redo();
+      switch (event.key.toLowerCase()) {
+        case 'z':
+          event.preventDefault();
+          if (event.shiftKey) redo();
+          else undo();
+          break;
+        case 'y':
+          event.preventDefault();
+          redo();
+          break;
+        case 'd':
+          event.preventDefault();
+          duplicateSelection();
+          break;
+        case 'c':
+          copySelection();
+          break;
+        case 'v':
+          event.preventDefault();
+          pasteClipboard();
+          break;
+        default:
+          break;
       }
     };
 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [undo, redo]);
+  }, [undo, redo, deleteSelection, duplicateSelection, copySelection, pasteClipboard, picker, setNodes]);
+
+  const catalog = useCatalog(capabilities.data ?? [], workspace.data?.plan?.features ?? [], locale);
+
+  const hasSelection = React.useMemo(
+    () =>
+      nodes.some(
+        (node) =>
+          (node.selected || node.id === selectedId) &&
+          (node.data as FlowNodeData).nodeType !== 'trigger',
+      ),
+    [nodes, selectedId],
+  );
+
+  // A flow with nothing but its trigger has not been started yet, so the canvas
+  // says what to do first instead of showing an empty expanse.
+  const isEmptyFlow = nodes.length <= 1 && edges.length === 0;
 
   const selectedNode = nodes.find((node) => node.id === selectedId);
   const selectedForInspector = selectedNode
@@ -669,15 +1045,24 @@ function Builder() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="w-[200px] shrink-0 border-r border-border bg-surface">
-          <Palette
-            capabilities={capabilities.data ?? []}
-            features={workspace.data?.plan?.features ?? []}
-            onAdd={addNode}
+        <aside className="flex w-[228px] shrink-0 flex-col border-r border-border bg-surface">
+          <div className="border-b border-border px-3 pb-2 pt-2.5">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">
+              {t('builder.palette')}
+            </p>
+            <p className="mt-1 text-[11px] leading-snug text-subtle">{t('builder.dragHint')}</p>
+          </div>
+          {/* Same component as the floating picker: a block offered in one place
+              is offered in the other, with the same availability rules. */}
+          <NodeCatalog
+            entries={catalog}
+            onPick={(type) => addNode(type)}
+            autoFocus={false}
+            draggable
           />
         </aside>
 
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 flex-1" ref={canvasRef}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -687,8 +1072,16 @@ function Builder() {
             onConnect={connect}
             isValidConnection={isValidConnection}
             onReconnect={reconnect}
+            onConnectStart={onConnectStart}
+            onConnectEnd={onConnectEnd}
             onNodeClick={(_, node) => setSelectedId(node.id)}
-            onPaneClick={() => setSelectedId(null)}
+            onPaneClick={() => {
+              setSelectedId(null);
+              setPicker(null);
+              setContextMenu(null);
+            }}
+            onPaneContextMenu={(event) => openContextMenu(event as React.MouseEvent)}
+            onNodeContextMenu={(event, node) => openContextMenu(event, node.id)}
             // History is recorded when a drag starts, so undo restores where the
             // block was before the move rather than mid-gesture.
             onNodeDragStart={() => snapshot()}
@@ -696,14 +1089,162 @@ function Builder() {
             onDragOver={onDragOver}
             snapToGrid
             snapGrid={[16, 16]}
+            // Double-click adds a block here, so it must not also zoom.
+            zoomOnDoubleClick={false}
+            multiSelectionKeyCode={['Shift', 'Meta', 'Control']}
+            selectionOnDrag
+            panOnDrag={[1, 2]}
             fitView
             proOptions={{ hideAttribution: true }}
-            deleteKeyCode={['Backspace', 'Delete']}
+            // Deletion goes through our own handler, which keeps the trigger and
+            // records one undo step for the whole removal.
+            deleteKeyCode={null}
           >
             <Background gap={18} size={1} color="rgb(var(--border))" />
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable nodeColor="rgb(var(--border))" maskColor="rgb(var(--bg) / .7)" />
+            <Controls showInteractive={false} position="bottom-right" />
+            <MiniMap
+              pannable
+              zoomable
+              position="bottom-left"
+              nodeColor="rgb(var(--border))"
+              maskColor="rgb(var(--bg) / .7)"
+            />
           </ReactFlow>
+
+          <CanvasToolbar
+            canUndo={canUndo}
+            canRedo={canRedo}
+            hasSelection={hasSelection}
+            onAdd={(point) => setPicker({ screen: point, flow: screenToFlowPosition(point) })}
+            onUndo={undo}
+            onRedo={redo}
+            onDuplicate={duplicateSelection}
+            onDelete={deleteSelection}
+            onOrganise={organise}
+            onZoomIn={() => zoomIn({ duration: 200 })}
+            onZoomOut={() => zoomOut({ duration: 200 })}
+            onFitView={() => fitView({ duration: 300, padding: 0.2 })}
+          />
+
+          {picker ? (
+            <>
+              {/* Catches the click that dismisses the picker without letting it
+                  reach the canvas and start a selection. */}
+              <div className="fixed inset-0 z-20" onMouseDown={() => setPicker(null)} />
+              <div
+                className="fixed z-30 w-[290px] overflow-hidden rounded-xl border border-border bg-surface shadow-lg"
+                style={pickerPosition(picker.screen)}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-subtle">
+                  {t('catalog.title')}
+                </p>
+                <NodeCatalog entries={catalog} onPick={pickFromCatalog} compact />
+              </div>
+            </>
+          ) : null}
+
+          {contextMenu ? (
+            <>
+              <div className="fixed inset-0 z-20" onMouseDown={() => setContextMenu(null)} />
+              <div
+                className="fixed z-30 min-w-[176px] overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-lg"
+                style={{ left: contextMenu.screen.x, top: contextMenu.screen.y }}
+                onMouseDown={(event) => event.stopPropagation()}
+              >
+                {contextMenu.nodeId ? (
+                  <>
+                    <MenuItem
+                      label={t('builder.duplicate')}
+                      shortcut="Ctrl+D"
+                      onClick={() => {
+                        duplicateSelection();
+                        setContextMenu(null);
+                      }}
+                    />
+                    <MenuItem
+                      label={t('common.copy')}
+                      shortcut="Ctrl+C"
+                      onClick={() => {
+                        copySelection();
+                        setContextMenu(null);
+                      }}
+                    />
+                    <MenuItem
+                      label={t('builder.deleteNode')}
+                      shortcut="Delete"
+                      danger
+                      onClick={() => {
+                        deleteSelection();
+                        setContextMenu(null);
+                      }}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <MenuItem
+                      label={t('builder.addBlock')}
+                      onClick={() => {
+                        setPicker({ screen: contextMenu.screen, flow: contextMenu.flow });
+                        setContextMenu(null);
+                      }}
+                    />
+                    <MenuItem
+                      label={t('common.paste')}
+                      shortcut="Ctrl+V"
+                      onClick={() => {
+                        pasteClipboard();
+                        setContextMenu(null);
+                      }}
+                    />
+                    <MenuItem
+                      label={t('builder.organise')}
+                      onClick={() => {
+                        organise();
+                        setContextMenu(null);
+                      }}
+                    />
+                    <MenuItem
+                      label={t('builder.fitView')}
+                      onClick={() => {
+                        fitView({ duration: 300, padding: 0.2 });
+                        setContextMenu(null);
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
+
+          {isEmptyFlow ? (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="pointer-events-auto max-w-[340px] rounded-xl border border-border bg-surface/95 px-5 py-4 text-center shadow-sm backdrop-blur">
+                <p className="text-[14px] font-medium">{t('builder.emptyTitle')}</p>
+                <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">
+                  {t('builder.emptyHint')}
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  <Button size="sm" onClick={() => setTriggerDialog(true)}>
+                    <Zap />
+                    {t('builder.addTrigger')}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={(event) =>
+                      setPicker({
+                        screen: { x: event.clientX, y: event.clientY },
+                        flow: screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+                      })
+                    }
+                  >
+                    {t('builder.emptyAddStep')}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {report ? (
             <div className="pointer-events-none absolute bottom-4 left-4 z-10">
@@ -752,7 +1293,7 @@ function Builder() {
             members={members.data ?? []}
             automations={automations.data ?? []}
             onChange={updateSelectedConfig}
-            onDelete={deleteSelected}
+            onDelete={deleteSelection}
           />
         </aside>
       </div>

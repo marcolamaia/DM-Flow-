@@ -11,7 +11,6 @@ import {
   Shuffle,
   Split,
   Square,
-  Tag,
   UserCheck,
   Variable,
   Workflow,
@@ -100,8 +99,7 @@ export const NODE_META: Record<string, NodeMeta> = {
     category: 'data',
   },
   end: { icon: Square, tone: 'text-subtle', labelPt: 'Fim', labelEn: 'End', category: 'terminal' },
-  Tag,
-} as unknown as Record<string, NodeMeta>;
+};
 
 export function nodeLabel(type: string, locale: string): string {
   const meta = NODE_META[type];
