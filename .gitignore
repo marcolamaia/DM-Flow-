@@ -13,3 +13,7 @@ coverage/
 *.log
 .pnpm-store/
 packages/db/generated/
+
+# Capturas de tela das baterias de navegador. São geradas a cada execução e não
+# são o resultado do teste — o resultado é a linha de PASS/FALHOU.
+b-*.png

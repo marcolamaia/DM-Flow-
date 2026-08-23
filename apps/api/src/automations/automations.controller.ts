@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
-import { TRIGGER_TYPES, flowGraphSchema, type TriggerType } from '@dmflow/shared';
+import { TRIGGER_TYPES, flowGraphSchema } from '@dmflow/shared';
 import { AutomationsService } from './automations.service';
 import { zodBody } from '../common/zod.pipe';
 import { CurrentUser, CurrentWorkspace } from '../common/decorators/current-user.decorator';

@@ -47,7 +47,7 @@ import {
   type FlowNodeData,
 } from '@/components/flow/flow-node';
 import { Inspector } from '@/components/flow/inspector';
-import { NODE_META, nodeLabel } from '@/components/flow/node-meta';
+import { nodeLabel } from '@/components/flow/node-meta';
 import { NodeCatalog, useCatalog } from '@/components/flow/node-catalog';
 import { BuilderLookupsProvider } from '@/components/flow/builder-context';
 import { autoLayout } from '@/components/flow/auto-layout';
@@ -574,8 +574,14 @@ function Builder() {
    */
   // Held in a ref so the listener below can stay attached across renders while
   // still calling the current conversion function.
+  //
+  // Atualizado num efeito, não durante a renderização: o React pode renderizar
+  // um componente e jogar o resultado fora sem nunca montá-lo, e nesse caso a
+  // ref teria ficado com uma função de uma árvore que não existe.
   const toFlow = React.useRef(screenToFlowPosition);
-  toFlow.current = screenToFlowPosition;
+  React.useEffect(() => {
+    toFlow.current = screenToFlowPosition;
+  }, [screenToFlowPosition]);
 
   const handleDoubleClick = React.useCallback((event: MouseEvent) => {
     const target = event.target as HTMLElement | null;

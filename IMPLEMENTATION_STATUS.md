@@ -109,12 +109,14 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 
 | Módulo | Estado | O que falta |
 |---|---|---|
-| Testes | **ANDAMENTO** | 222 testes + 106 no navegador, em 7 baterias. Falta cobrir inbox |
+| Testes | **ANDAMENTO** | 222 testes + 109 no navegador, em 7 baterias. Falta cobrir inbox |
 | Limite de requisições | **PRONTO** | — |
 | Logs estruturados | **PRONTO** | Nunca registram senha nem token |
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |
+| Linter | **PRONTO** | `eslint.config.mjs` criado nesta etapa: o script `pnpm lint` existia desde o primeiro dia e **nunca rodou** por falta do arquivo de configuração |
+| Segredos versionados | **PRONTO** | `pnpm check:secrets` — 8 padrões, verificado plantando segredos falsos |
 | Dependências vulneráveis | **PRONTO** | `nodemailer` atualizado. O resto é desenvolvimento ou não nos alcança — ver SECURITY.md |
-| **CI** | **NÃO INICIADO** | Fila #26 |
+| **CI** | **ANDAMENTO** | `.github/workflows/ci.yml`: instalar, migrations, compilar, linter, tipos, 222 testes contra Postgres e Redis reais, e guarda de segredos. **Falta cobrir as baterias de navegador**, que exigem a plataforma no ar |
 | Deploy na Heroku | **ANDAMENTO** | Procfiles, app.json, build e DEPLOYMENT.md prontos e verificados aqui. **Falta rodar numa Heroku de verdade** — depende do Marcos criar os apps |
 | **CockroachDB** | **BLOQUEADO** | Precisa de cluster |
 | Row Level Security | **NÃO INICIADO** | Fila #24 |

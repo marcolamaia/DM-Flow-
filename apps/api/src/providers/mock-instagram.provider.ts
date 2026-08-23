@@ -79,7 +79,7 @@ export class MockInstagramProvider implements ChannelProvider {
     };
   }
 
-  async refreshCredentials(input: {
+  async refreshCredentials(_input: {
     accountId: string;
     refreshToken?: string;
   }): Promise<{ accessToken: string; expiresAt?: Date } | null> {
@@ -93,7 +93,7 @@ export class MockInstagramProvider implements ChannelProvider {
     // Nothing to call upstream; the account row is what holds the connection.
   }
 
-  async getAccountHealth(input: { accountId: string }): Promise<AccountHealth> {
+  async getAccountHealth(_input: { accountId: string }): Promise<AccountHealth> {
     return {
       status: 'CONNECTED',
       detail: 'sandbox account',
@@ -245,12 +245,12 @@ export class MockInstagramProvider implements ChannelProvider {
     };
   }
 
-  async replyToComment(ctx: CommentContext, body: string): Promise<SendResult> {
+  async replyToComment(ctx: CommentContext, _body: string): Promise<SendResult> {
     this.consumeRateBudget(ctx.externalAccountId);
     return { externalMessageId: `sbreply_${uuidv7()}`, sentAt: new Date() };
   }
 
-  async sendPrivateReply(ctx: CommentContext, message: OutboundMessage): Promise<SendResult> {
+  async sendPrivateReply(ctx: CommentContext, _message: OutboundMessage): Promise<SendResult> {
     this.consumeRateBudget(ctx.externalAccountId);
     return { externalMessageId: `sbpriv_${uuidv7()}`, sentAt: new Date() };
   }

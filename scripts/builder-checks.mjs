@@ -8,6 +8,11 @@
  *   node -r @swc-node/register apps/api/scripts/build-test-flow.ts
  *   node scripts/builder-checks.mjs <automation-id>
  *
+ * UM CENÁRIO NOVO A CADA EXECUÇÃO. Esta bateria cria, apaga e salva de verdade
+ * — termina com 50 blocos onde começou com 9. Rodar duas vezes na mesma
+ * automação faz a segunda começar do que a primeira deixou, e quatro
+ * verificações falham por contagem sem que exista defeito nenhum no produto.
+ *
  * Two bugs were found by running this rather than by reading the code: a
  * connection could not be deleted at all, and deleting one also deleted whatever
  * block happened to be open in the side panel.
@@ -62,19 +67,37 @@ await fit();
 ok('posições persistem após recarregar', await nN()===9 && await nE()===12, `${await nN()}/${await nE()}`);
 
 // --- CONNECT: novo bloco e conexão
-const eAntes = await nE(), nAntes = await nN();
+const nAntes = await nN();
 await p.click('aside button[data-node-type="add_tag"]'); await p.waitForTimeout(1500);
 ok('criar bloco pelo catálogo', await nN()===nAntes+1);
 
-// liga o novo bloco (último) a partir do "Fim"? Fim é terminal. Vamos ligar msg-b -> novo.
-const nodes = await p.$$('.react-flow__node');
-const novo = nodes[nodes.length-1];
-// procura um bloco com saída livre: o novo bloco add_tag tem saída
-const alvo = novo;
-// conectar: pegar a saída do bloco "Passando para saber" (msg-c já ligado). Usa o novo como destino a partir de msg-b? já ligado.
-// Em vez disso: desconectar e reconectar uma edge existente.
 const edge = await p.$('.react-flow__edge');
 ok('há conexões para manipular', Boolean(edge));
+
+// --- DUPLO CLIQUE no vazio: abre o catálogo flutuante e cria onde se clicou.
+// O gesto converte a coordenada da tela em coordenada do canvas por um caminho
+// próprio, diferente do usado pelo arrastar — daí valer uma verificação sua.
+const paneDc = await p.$('.react-flow__pane');
+const pbDc = await paneDc.boundingBox();
+const ponto = { x: pbDc.x + pbDc.width - 120, y: pbDc.y + pbDc.height - 120 };
+const dcAntes = await nN();
+await p.mouse.dblclick(ponto.x, ponto.y);
+await p.waitForTimeout(800);
+const flutuante = 'div.z-30:has([data-node-type])';
+ok('duplo clique no vazio abre o catálogo', Boolean(await p.$(flutuante)));
+await p.click(`${flutuante} [data-node-type="add_tag"]`);
+await p.waitForTimeout(1200);
+ok('duplo clique cria o bloco', await nN()===dcAntes+1, `${dcAntes} -> ${await nN()}`);
+// Onde se clicou, e não no canto: a conversão de coordenada é justamente o que
+// quebraria em silêncio, deixando o bloco novo fora da vista.
+const novoBloco = (await p.$$('.react-flow__node')).at(-1);
+const bb = await novoBloco.boundingBox();
+ok(
+  'bloco nasce perto do clique',
+  bb && Math.abs(bb.x - ponto.x) < 260 && Math.abs(bb.y - ponto.y) < 260,
+  bb ? `clique (${Math.round(ponto.x)},${Math.round(ponto.y)}) bloco (${Math.round(bb.x)},${Math.round(bb.y)})` : 'sem caixa',
+);
+await p.keyboard.press('Control+z'); await p.waitForTimeout(900);
 
 // --- DESCONECTAR: seleciona uma conexão e apaga, sem tocar nos blocos
 const eAntesDesc = await nE(), nAntesDesc = await nN();
@@ -132,7 +155,6 @@ const paraExcluir = (await p.$$('.react-flow__node'))[3];
 await paraExcluir.click(); await p.waitForTimeout(500);
 await p.keyboard.press('Delete'); await p.waitForTimeout(1000);
 ok('excluir bloco conectado', await nN()===exAntesN-1 && await nE()<exAntesE, `blocos ${exAntesN}->${await nN()}, conexões ${exAntesE}->${await nE()}`);
-const orfas = await p.$$eval('.react-flow__edge', els => els.length);
 await p.keyboard.press('Control+z'); await p.waitForTimeout(1200);
 ok('desfazer devolve bloco e conexões', await nN()===exAntesN && await nE()===exAntesE, `${await nN()}/${await nE()}`);
 

@@ -1,6 +1,5 @@
 import { chromium } from 'playwright';
 
-const API = 'http://localhost:4000';
 const WEB = 'http://localhost:3000';
 const stamp = Date.now();
 const email = `contatos-${stamp}@test.local`;

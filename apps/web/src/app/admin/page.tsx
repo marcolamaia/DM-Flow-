@@ -4,6 +4,7 @@ import * as React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { get } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useDaysAgo } from '@/lib/use-days-ago';
 import { Card, CardBody, CardHeader, CardTitle, ErrorState, Skeleton } from '@/components/ui/primitives';
 import { Metric, Money, Rate } from '@/components/admin/money';
 import type { AdminOverview, MetricDefinition } from '@/lib/types';
@@ -21,14 +22,14 @@ export default function AdminOverviewPage() {
   const { t, locale } = useI18n();
   const [days, setDays] = React.useState<(typeof RANGES)[number]>(30);
 
-  const from = React.useMemo(
-    () => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10),
-    [days],
-  );
+  const from = useDaysAgo(days);
 
   const overview = useQuery({
     queryKey: ['admin', 'overview', from],
     queryFn: () => get<AdminOverview>(`/admin/overview?from=${from}`),
+    // Sem data ainda não há período: consultar sem ela devolveria números de
+    // um intervalo que ninguém pediu.
+    enabled: from !== null,
   });
 
   const byId = React.useMemo(() => {

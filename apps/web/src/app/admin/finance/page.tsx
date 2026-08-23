@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle } from 'lucide-react';
 import { get } from '@/lib/api';
 import { useI18n } from '@/lib/i18n';
+import { useDaysAgo } from '@/lib/use-days-ago';
 import {
   Badge,
   Card,
@@ -23,10 +24,7 @@ const RANGES = [7, 30, 90] as const;
 export default function AdminFinancePage() {
   const { t, locale } = useI18n();
   const [days, setDays] = React.useState<(typeof RANGES)[number]>(30);
-  const from = React.useMemo(
-    () => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10),
-    [days],
-  );
+  const from = useDaysAgo(days);
 
   const byPlan = useQuery({
     queryKey: ['admin', 'finance', 'by-plan'],
@@ -35,6 +33,8 @@ export default function AdminFinancePage() {
   const cashflow = useQuery({
     queryKey: ['admin', 'finance', 'cashflow', from],
     queryFn: () => get<Cashflow>(`/admin/finance/cashflow?from=${from}`),
+    // Ver o comentário em useDaysAgo: até a data existir, não há o que consultar.
+    enabled: from !== null,
   });
   const problems = useQuery({
     queryKey: ['admin', 'finance', 'problems'],

@@ -134,7 +134,6 @@ async function main(): Promise<void> {
     body: JSON.stringify({ graph }),
   });
   if (!saved.ok) throw new Error(`save failed: ${saved.status} ${await saved.text()}`);
-  const report = (await saved.json()).validationReport;
 
   const accounts = await (await fetch(`${API}/channels`, { headers: scoped })).json();
   const trigger = await fetch(`${API}/automations/${automation.id}/triggers`, {

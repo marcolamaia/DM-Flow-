@@ -28,7 +28,6 @@ const boss = { email: `chefe-${suffix}@test.local`, password: 'senhaforte123', n
 let customerCookie = '';
 let staffCookie = '';
 let bossCookie = '';
-let customerWorkspace = '';
 const workspaces: string[] = [];
 
 const runPrefix = `${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 256)}`;
@@ -62,7 +61,6 @@ beforeAll(async () => {
 
   const a = await signUp(customer);
   customerCookie = a.cookie;
-  customerWorkspace = a.workspaceId;
   staffCookie = (await signUp(staff)).cookie;
   bossCookie = (await signUp(boss)).cookie;
 

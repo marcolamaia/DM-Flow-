@@ -120,6 +120,44 @@ heroku config:set -a dmflow-web \
 
 ---
 
+## A conferência automática, antes de qualquer deploy
+
+Toda vez que código novo é enviado para o GitHub, o próprio GitHub sobe uma
+máquina limpa e roda a lista inteira de verificações sozinho. Está em
+`.github/workflows/ci.yml`.
+
+É a mesma lista que era feita à mão até aqui. A diferença é que à mão dependia
+de alguém lembrar — e a hora em que ninguém lembra é justamente a hora da
+correção às pressas, com cliente esperando.
+
+O que ela faz, em ordem:
+
+| Passo | O que verifica | O que impede |
+|---|---|---|
+| Instalar | Que `pnpm-lock.yaml` bate com os `package.json` | Que a máquina do deploy instale versões diferentes das testadas |
+| Preparar o banco | Que as migrations rodam do zero | Um deploy que morre no `release` por migration quebrada |
+| Compilar | Que os quatro pacotes compilam | Código que só quebra na hora de publicar |
+| Linter | Erros que o compilador não vê | `await` esquecido, variável morta, efeito com dependência faltando |
+| Tipos | TypeScript estrito nos quatro pacotes | Campo renomeado num lugar e não no outro |
+| Testes | Os testes do domínio, os da API contra Postgres e Redis **de verdade**, e a paridade das traduções | Cadastro, cobrança, isolamento entre clientes ou tradução quebrados |
+| Segredos | Que nenhuma chave foi versionada | Uma chave do Stripe no repositório — que não se conserta apagando, só revogando |
+
+**Enquanto ela estiver vermelha, o código não entra na branch principal.** E é a
+branch principal que a Heroku publica. Esse é o ponto inteiro: colocar uma porta
+entre "escrevi" e "o cliente está usando".
+
+### O que ela ainda NÃO cobre
+
+As baterias de navegador — as que abrem o Chrome, clicam nos botões e conferem
+que a tela faz o que promete — **continuam sendo rodadas à mão.** Elas precisam
+da plataforma inteira no ar (API, worker, site e dados de exemplo), e montar
+isso dentro da conferência automática é trabalho próprio, ainda não feito.
+
+Fica dito porque a alternativa seria pior: acreditar que está coberto o que não
+está.
+
+---
+
 ## O que acontece em cada deploy
 
 ```

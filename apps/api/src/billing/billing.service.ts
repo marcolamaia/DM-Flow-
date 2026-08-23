@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type Stripe from 'stripe';
-import { DmFlowError, monthlyCents, uuidv7 } from '@dmflow/shared';
+import { DmFlowError, monthlyCents } from '@dmflow/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../common/audit.service';
 import { StripeClient } from './stripe.client';
@@ -96,10 +96,9 @@ export class BillingService {
   }
 
   async createCheckout(workspaceId: string, userId: string, planCode: string) {
-    const [plan, workspace, subscription, user] = await Promise.all([
+    const [plan, workspace, user] = await Promise.all([
       this.prisma.plan.findUnique({ where: { code: planCode } }),
       this.prisma.workspace.findUnique({ where: { id: workspaceId } }),
-      this.prisma.subscription.findUnique({ where: { workspaceId } }),
       this.prisma.user.findUnique({ where: { id: userId } }),
     ]);
 

@@ -76,8 +76,6 @@ afterAll(async () => {
   await app.close();
 });
 
-const as = (key: string) => ({ cookie: cookies[key]!, ip: freshAddress() });
-
 describe('reading customer accounts', () => {
   it('lets support read the address and shows an analyst only that the account exists', async () => {
     const forSupport = await request(server)

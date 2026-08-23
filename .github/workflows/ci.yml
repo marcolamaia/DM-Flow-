@@ -1,0 +1,114 @@
+# A conferência automática do DM FLOW.
+#
+# Roda a cada envio de código e a cada pedido de junção. Enquanto ela estiver
+# vermelha, o código não entra na branch principal — e é a branch principal que
+# a Heroku publica. É esse o ponto: colocar uma porta entre "escrevi" e "o
+# cliente está usando".
+#
+# O que ela faz é exatamente o que era feito à mão até aqui. A diferença é que
+# à mão dependia de alguém lembrar.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# Um envio novo cancela a conferência do envio anterior da mesma branch. Sem
+# isto, uma sequência de correções deixa cinco execuções competindo e a última
+# — a única que interessa — é a que termina por último.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Os testes da API sobem a aplicação de verdade contra Postgres e Redis de
+  # verdade. Valores de teste, nunca de produção: qualquer segredo real aqui
+  # ficaria visível no log de qualquer execução.
+  DATABASE_URL: postgresql://dmflow:dmflow@localhost:5432/dmflow?schema=public
+  REDIS_URL: redis://localhost:6379
+  SESSION_SECRET: ci-session-secret-not-a-real-secret-000000
+  ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+  MAIL_TRANSPORT: log
+  INSTAGRAM_PROVIDER: mock
+  NODE_ENV: test
+
+jobs:
+  verificar:
+    name: Conferir o código
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dmflow
+          POSTGRES_PASSWORD: dmflow
+          POSTGRES_DB: dmflow
+        ports: ['5432:5432']
+        # Sem isto os passos começam antes do banco aceitar conexão, e o
+        # primeiro teste falha por um motivo que não tem nada a ver com o
+        # código.
+        options: >-
+          --health-cmd "pg_isready -U dmflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sem versão fixa: o pnpm lê o campo `packageManager` do package.json, que
+      # é a mesma versão usada para desenvolver. Duas versões de gerenciador
+      # resolvem dependências de formas diferentes, e a diferença só aparece em
+      # produção.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Instalar dependências
+        # --frozen-lockfile: se o pnpm-lock.yaml não bater com o package.json, a
+        # execução para. Instalar "o que der" esconde exatamente o tipo de
+        # divergência que quebra o deploy.
+        run: pnpm install --frozen-lockfile
+
+      - name: Preparar o banco
+        run: pnpm --filter @dmflow/db exec prisma migrate deploy
+
+      - name: Compilar
+        env:
+          # Gravada dentro do site em tempo de compilação, não lida em
+          # execução. Em produção é o endereço real da API; aqui é localhost
+          # mesmo, porque aqui a API é local. A verificação que recusa
+          # localhost é ligada só no build de produção, por
+          # DM_FLOW_REQUIRE_PUBLIC_API_URL.
+          NEXT_PUBLIC_API_URL: http://localhost:4000
+        run: pnpm build
+
+      - name: Linter
+        run: pnpm lint
+
+      - name: Tipos
+        run: pnpm typecheck
+
+      - name: Testes
+        # Um comando só: os testes do pacote de domínio, os da API contra banco
+        # e Redis reais, e a conferência de que pt-BR e inglês têm as mesmas
+        # chaves de tradução.
+        run: pnpm test
+
+      - name: Nenhum segredo versionado
+        run: node scripts/check-no-secrets.mjs

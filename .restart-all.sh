@@ -15,11 +15,18 @@ SP=/tmp/claude-0/-home-user-DM-Flow-/80f3ab05-3e95-5a2d-9bb7-eda89de14384/scratc
 # that do exist — which reads exactly like a bug in the new code.
 pkill -f "dist/main.j[s]" 2>/dev/null
 pkill -f "dist/worker.j[s]" 2>/dev/null
+# O site pelo mesmo motivo, e o motivo é ainda mais traiçoeiro aqui: um
+# `next start` de antes do build serve HTML apontando para pedaços de
+# JavaScript cujos nomes mudaram, e o navegador recebe 404 em cada um. A tela
+# abre em branco e o console fala de tipo MIME — nada que pareça "o servidor é
+# velho".
+pkill -f "next-serve[r]" 2>/dev/null
+pkill -f "next sta[r]t" 2>/dev/null
 sleep 1
 setsid node apps/api/dist/main.js > "$SP/prod-api.log" 2>&1 < /dev/null &
 setsid node apps/api/dist/worker.js > "$SP/prod-worker.log" 2>&1 < /dev/null &
-pgrep -f "next-serve[r]" >/dev/null || (cd apps/web && NODE_ENV=production setsid npx next start -p 3000 > "$SP/web.log" 2>&1 < /dev/null &)
-sleep 8
+(cd apps/web && NODE_ENV=production setsid npx next start -p 3000 > "$SP/web.log" 2>&1 < /dev/null &)
+sleep 10
 echo -n "postgres: "; pg_isready | tail -1
 echo -n "redis: "; redis-cli ping
 echo -n "api: "; curl -s -m 5 http://localhost:4000/health/ready || echo FALHOU
