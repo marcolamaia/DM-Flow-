@@ -21,6 +21,12 @@ const MAX_STEPS_PER_EXECUTION = 200;
 const MAX_STEPS_PER_TICK = 40;
 const EXECUTION_LOCK_MS = 30_000;
 const MAX_NODE_ATTEMPTS = 5;
+/**
+ * How many times one contact may be handed from automation to automation in a
+ * single chain. Two flows that start each other would otherwise spawn runs
+ * forever — each one individually well-behaved and bounded.
+ */
+const MAX_HANDOFF_DEPTH = 5;
 
 export interface StartExecutionInput {
   workspaceId: string;
@@ -220,6 +226,7 @@ export class EngineService {
         graph,
         outcome,
         { finishedAt, durationMs, attempt: execution.attemptCount },
+        ctx,
       );
 
       if (!shouldContinue) return;
@@ -237,6 +244,7 @@ export class EngineService {
     graph: FlowGraph,
     outcome: NodeOutcome,
     meta: { finishedAt: Date; durationMs: number; attempt: number },
+    ctx: ExecutionContextData,
   ): Promise<boolean> {
     switch (outcome.kind) {
       case 'continue': {
@@ -299,6 +307,63 @@ export class EngineService {
           },
         });
         return false;
+      }
+
+      case 'handoff': {
+        // The other automation starts as its own run, pinned to its own published
+        // version. Nesting one flow's steps inside another would make a change to
+        // the callee silently rewrite what the caller does mid-execution.
+        const depth = Number(ctx.variables.__handoffDepth ?? 0);
+        const started =
+          depth >= MAX_HANDOFF_DEPTH
+            ? { skipped: 'handoff_depth_exceeded' as const }
+            : await this.start({
+                workspaceId: ctx.workspaceId,
+                automationId: outcome.automationId,
+                contactId: ctx.contactId,
+                conversationId: ctx.conversationId,
+                connectedAccountId: ctx.connectedAccountId,
+                variables: { __handoffDepth: depth + 1, __origin: ctx.origin },
+                origin: ctx.origin,
+              });
+
+        await this.prisma.executionStep.update({
+          where: { id: stepId },
+          data: {
+            status: 'COMPLETED',
+            output: {
+              ...(outcome.output ?? {}),
+              startedAutomationId: outcome.automationId,
+              ...('executionId' in started
+                ? { startedExecutionId: started.executionId }
+                : { notStarted: started.skipped }),
+            } as never,
+            finishedAt: meta.finishedAt,
+            durationMs: meta.durationMs,
+          },
+        });
+
+        if (outcome.stopCurrent) {
+          await this.completeExecution(executionId, lockVersion, 'handed_off');
+          return false;
+        }
+
+        const next = this.nextNodeId(graph, node.id, null);
+        if (!next) {
+          await this.completeExecution(executionId, lockVersion, 'no_outgoing_edge');
+          return false;
+        }
+
+        const updated = await this.prisma.execution.updateMany({
+          where: { id: executionId, lockVersion },
+          data: {
+            currentNodeId: next,
+            stepCount: { increment: 1 },
+            attemptCount: 0,
+            lockVersion: { increment: 1 },
+          },
+        });
+        return updated.count === 1;
       }
 
       case 'end': {

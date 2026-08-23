@@ -15,6 +15,7 @@ export const NODE_TYPES = [
   'send_message',
   'condition',
   'branch',
+  'randomizer',
   'delay',
   'add_tag',
   'remove_tag',
@@ -25,6 +26,7 @@ export const NODE_TYPES = [
   'set_conversation_status',
   'notify_team',
   'unsubscribe_contact',
+  'start_automation',
   'end',
 ] as const;
 export type NodeType = (typeof NODE_TYPES)[number];
@@ -77,6 +79,36 @@ export const branchConfig = z.object({
     )
     .min(1)
     .max(10),
+});
+
+export const randomizerConfig = z
+  .object({
+    paths: z
+      .array(
+        z.object({
+          id: z.string().min(1).max(64),
+          label: z.string().max(60).default(''),
+          /** Whole percent. Kept as an integer so the total is exact, never 99.99. */
+          weight: z.number().int().min(0).max(100),
+        }),
+      )
+      .min(2)
+      .max(10),
+  })
+  .refine((v) => v.paths.reduce((total, path) => total + path.weight, 0) === 100, {
+    message: 'weights must add up to 100',
+  });
+
+export const startAutomationConfig = z.object({
+  automationId: z.string().min(1),
+  /**
+   * Whether this run stops once the other automation is started.
+   *
+   * Handing the contact over and also carrying on down this flow means two
+   * automations messaging the same person at once, so the choice has to be
+   * deliberate rather than implied.
+   */
+  stopCurrent: z.boolean().default(true),
 });
 
 export const delayConfig = z
@@ -139,6 +171,7 @@ export const NODE_CONFIG_SCHEMAS: Record<NodeType, z.ZodTypeAny> = {
   send_message: sendMessageConfig,
   condition: conditionConfig,
   branch: branchConfig,
+  randomizer: randomizerConfig,
   delay: delayConfig,
   add_tag: addTagConfig,
   remove_tag: removeTagConfig,
@@ -149,6 +182,7 @@ export const NODE_CONFIG_SCHEMAS: Record<NodeType, z.ZodTypeAny> = {
   set_conversation_status: setConversationStatusConfig,
   notify_team: notifyTeamConfig,
   unsubscribe_contact: emptyConfig,
+  start_automation: startAutomationConfig,
   end: emptyConfig,
 };
 
@@ -207,8 +241,12 @@ export interface NodeDefinition {
   requiredCapabilities: string[];
   /** Feature flag gate from the workspace plan, if any. */
   requiredFeature?: string;
-  /** Outgoing handles. Empty means a single default handle. */
-  handles: string[];
+  /**
+   * Connection points are NOT declared here. They come from portsOf() in
+   * ./ports, which is the single answer the canvas, the validator and the engine
+   * all read — a node type describing its own ports in two places is how the
+   * branch node ended up with none drawn at all.
+   */
   terminal: boolean;
 }
 
@@ -222,7 +260,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'trigger',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   send_message: {
@@ -234,7 +271,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'message',
     requiredCapabilities: [CAP.IG_SEND_TEXT],
-    handles: [],
     terminal: false,
   },
   condition: {
@@ -246,7 +282,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'logic',
     requiredCapabilities: [],
-    handles: ['true', 'false'],
     terminal: false,
   },
   branch: {
@@ -258,7 +293,17 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'logic',
     requiredCapabilities: [],
-    handles: [],
+    terminal: false,
+  },
+  randomizer: {
+    type: 'randomizer',
+    label: { 'pt-BR': 'Randomizador', en: 'Randomizer' },
+    description: {
+      'pt-BR': 'Distribui os contatos entre vários caminhos por porcentagem.',
+      en: 'Splits contacts across several paths by percentage.',
+    },
+    category: 'logic',
+    requiredCapabilities: [],
     terminal: false,
   },
   delay: {
@@ -270,7 +315,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'logic',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   add_tag: {
@@ -282,7 +326,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'data',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   remove_tag: {
@@ -294,7 +337,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'data',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   set_custom_field: {
@@ -306,7 +348,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'data',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   clear_custom_field: {
@@ -318,7 +359,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'data',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   http_request: {
@@ -331,7 +371,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     category: 'integration',
     requiredCapabilities: [],
     requiredFeature: 'http_request_node',
-    handles: [],
     terminal: false,
   },
   assign_conversation: {
@@ -343,7 +382,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'inbox',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   set_conversation_status: {
@@ -355,7 +393,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'inbox',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   notify_team: {
@@ -367,7 +404,6 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'inbox',
     requiredCapabilities: [],
-    handles: [],
     terminal: false,
   },
   unsubscribe_contact: {
@@ -379,7 +415,17 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'data',
     requiredCapabilities: [],
-    handles: [],
+    terminal: false,
+  },
+  start_automation: {
+    type: 'start_automation',
+    label: { 'pt-BR': 'Iniciar automação', en: 'Start automation' },
+    description: {
+      'pt-BR': 'Entrega o contato para outra automação, sem duplicar o fluxo dela aqui.',
+      en: 'Hands the contact to another automation, without duplicating its flow here.',
+    },
+    category: 'logic',
+    requiredCapabilities: [],
     terminal: false,
   },
   end: {
@@ -391,10 +437,48 @@ export const NODE_DEFINITIONS: Record<NodeType, NodeDefinition> = {
     },
     category: 'terminal',
     requiredCapabilities: [],
-    handles: [],
     terminal: true,
   },
 };
+
+/**
+ * What a node holds the moment it is created.
+ *
+ * Nodes whose exits come from their own configuration must arrive with some — a
+ * randomiser with no paths has no exits at all, so it lands on the canvas as a
+ * dead end nothing can be connected to. The defaults are the smallest shape that
+ * is still useful and still adds up.
+ */
+export function defaultNodeConfig(type: NodeType): Record<string, unknown> {
+  switch (type) {
+    case 'send_message':
+      return { blocks: [{ type: 'text', text: '' }], quickReplies: [], asPrivateReply: false };
+    case 'branch':
+      return { branches: [{ id: 'p1', label: '', predicate: null }] };
+    case 'randomizer':
+      return {
+        paths: [
+          { id: 'a', label: 'A', weight: 50 },
+          { id: 'b', label: 'B', weight: 50 },
+        ],
+      };
+    case 'delay':
+      return {
+        mode: 'duration',
+        amount: 1,
+        unit: 'hours',
+        resumeWindow: { enabled: false, startHour: 8, endHour: 22 },
+      };
+    case 'http_request':
+      return { method: 'GET', url: '', headers: {}, timeoutMs: 10_000 };
+    case 'set_conversation_status':
+      return { status: 'OPEN' };
+    case 'start_automation':
+      return { automationId: '', stopCurrent: true };
+    default:
+      return {};
+  }
+}
 
 export function parseNodeConfig(type: NodeType, config: unknown) {
   return NODE_CONFIG_SCHEMAS[type].safeParse(config ?? {});

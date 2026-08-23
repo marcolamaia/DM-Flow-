@@ -5,6 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { Button, Field, Input, Label, Select, Textarea } from '@/components/ui/primitives';
 import { nodeLabel } from './node-meta';
+import { cn } from '@/lib/utils';
 import type { Tag, CustomField } from '@/lib/types';
 
 export interface EditableNode {
@@ -23,6 +24,7 @@ export function Inspector({
   tags,
   fields,
   members,
+  automations,
   onChange,
   onDelete,
 }: {
@@ -30,6 +32,8 @@ export function Inspector({
   tags: Tag[];
   fields: CustomField[];
   members: Array<{ userId: string; name: string }>;
+  /** Other automations this flow may hand a contact to. */
+  automations: Array<{ id: string; name: string }>;
   onChange: (config: Record<string, unknown>) => void;
   onDelete: () => void;
 }) {
@@ -151,6 +155,10 @@ export function Inspector({
               onChange={(e) => set({ message: e.target.value })}
             />
           </Field>
+        ) : node.type === 'randomizer' ? (
+          <RandomizerConfig config={node.config} set={set} />
+        ) : node.type === 'start_automation' ? (
+          <StartAutomationConfig config={node.config} set={set} automations={automations} />
         ) : node.type === 'http_request' ? (
           <HttpConfig config={node.config} set={set} />
         ) : (
@@ -457,5 +465,157 @@ function HttpConfig({
         />
       </Field>
     </>
+  );
+}
+
+
+interface RandomizerPath {
+  id: string;
+  label: string;
+  weight: number;
+}
+
+/**
+ * Weighted split.
+ *
+ * The total is shown at all times and refuses to be wrong quietly: weights that
+ * do not add up to 100 are rejected by the domain schema, so the operator has to
+ * find out here rather than at publish time.
+ */
+function RandomizerConfig({
+  config,
+  set,
+}: {
+  config: Record<string, unknown>;
+  set: (patch: Record<string, unknown>) => void;
+}) {
+  const { t, locale } = useI18n();
+  const paths = (config.paths ?? []) as RandomizerPath[];
+  const total = paths.reduce((sum, path) => sum + (Number(path.weight) || 0), 0);
+
+  const update = (next: RandomizerPath[]) => set({ paths: next });
+
+  /** Spreads 100 across the paths, giving the remainder to the first one. */
+  const balance = (next: RandomizerPath[]) => {
+    const share = Math.floor(100 / next.length);
+    return next.map((path, index) => ({
+      ...path,
+      weight: index === 0 ? 100 - share * (next.length - 1) : share,
+    }));
+  };
+
+  return (
+    <div className="space-y-3">
+      {paths.map((path, index) => (
+        <div key={path.id} className="flex items-end gap-2">
+          <Field label={`${t('builder.path')} ${index + 1}`} className="flex-1">
+            <Input
+              value={path.label}
+              placeholder={String.fromCharCode(65 + index)}
+              onChange={(e) =>
+                update(paths.map((p) => (p.id === path.id ? { ...p, label: e.target.value } : p)))
+              }
+            />
+          </Field>
+          <Field label="%" className="w-[84px]">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={String(path.weight)}
+              onChange={(e) =>
+                update(
+                  paths.map((p) =>
+                    p.id === path.id ? { ...p, weight: Number(e.target.value) || 0 } : p,
+                  ),
+                )
+              }
+            />
+          </Field>
+          {paths.length > 2 ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t('common.remove')}
+              onClick={() => update(balance(paths.filter((p) => p.id !== path.id)))}
+            >
+              <Trash2 />
+            </Button>
+          ) : null}
+        </div>
+      ))}
+
+      <div className="flex items-center justify-between">
+        <Button
+          variant="secondary"
+          size="sm"
+          disabled={paths.length >= 10}
+          onClick={() =>
+            update(
+              balance([
+                ...paths,
+                { id: `p${Date.now().toString(36)}`, label: '', weight: 0 },
+              ]),
+            )
+          }
+        >
+          {t('builder.addPath')}
+        </Button>
+        <span
+          className={cn(
+            'text-[12px] tabular-nums',
+            total === 100 ? 'text-muted' : 'font-medium text-danger',
+          )}
+        >
+          {total}%{' '}
+          {total !== 100 ? (locale === 'en' ? '— must be 100%' : '— precisa dar 100%') : null}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function StartAutomationConfig({
+  config,
+  set,
+  automations,
+}: {
+  config: Record<string, unknown>;
+  set: (patch: Record<string, unknown>) => void;
+  automations: Array<{ id: string; name: string }>;
+}) {
+  const { t } = useI18n();
+
+  return (
+    <div className="space-y-3">
+      <Field label={t('builder.automation')}>
+        <Select
+          value={String(config.automationId ?? '')}
+          onChange={(e) => set({ automationId: e.target.value })}
+        >
+          <option value="">{t('builder.chooseAutomation')}</option>
+          {automations.map((automation) => (
+            <option key={automation.id} value={automation.id}>
+              {automation.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      <label className="flex cursor-pointer items-start gap-2">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={config.stopCurrent !== false}
+          onChange={(e) => set({ stopCurrent: e.target.checked })}
+        />
+        <span className="text-[12.5px] leading-snug">
+          {t('builder.stopCurrent')}
+          <span className="mt-0.5 block text-[11.5px] text-subtle">
+            {t('builder.stopCurrentHint')}
+          </span>
+        </span>
+      </label>
+    </div>
   );
 }

@@ -11,6 +11,7 @@ const PALETTE_ORDER = [
   'send_message',
   'condition',
   'branch',
+  'randomizer',
   'delay',
   'add_tag',
   'remove_tag',
@@ -21,6 +22,7 @@ const PALETTE_ORDER = [
   'notify_team',
   'http_request',
   'unsubscribe_contact',
+  'start_automation',
   'end',
 ];
 

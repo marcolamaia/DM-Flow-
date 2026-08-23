@@ -20,13 +20,23 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ArrowLeft, CheckCircle2, Redo2, Rocket, TriangleAlert, Undo2, Zap } from 'lucide-react';
+// Imported by subpath rather than from the package root: the root barrel also
+// pulls in id generation, which reaches for node:crypto and cannot be bundled
+// for a browser.
+import { CONNECTION_REJECTION_MESSAGES, canConnect, portsOf } from '@dmflow/shared/ports';
+import { defaultNodeConfig, type FlowGraph } from '@dmflow/shared/flow';
 import { ApiError, del, get, post, put } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { useApp } from '@/components/providers/app-providers';
 import { Badge, Button, Field, Input, Select, Spinner } from '@/components/ui/primitives';
 import { Dialog, DialogContent, DialogFooter } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/toast';
-import { FlowNode, type FlowNodeData } from '@/components/flow/flow-node';
+import {
+  FlowNode,
+  handleId,
+  portIdFromHandle,
+  type FlowNodeData,
+} from '@/components/flow/flow-node';
 import { Palette } from '@/components/flow/palette';
 import { Inspector } from '@/components/flow/inspector';
 import { NODE_META, nodeLabel } from '@/components/flow/node-meta';
@@ -75,7 +85,56 @@ interface RawEdge {
 }
 
 /** Handles a node exposes, mirroring the server's node definitions. */
-const NODE_HANDLES: Record<string, string[]> = { condition: ['true', 'false'] };
+/**
+ * What the canvas draws for one node.
+ *
+ * Ports come from the domain — the same function the validator and the engine
+ * read — so a node type never ends up with exits on the canvas that the engine
+ * does not follow, or exits in the engine that the canvas never drew.
+ */
+function nodeData(
+  type: string,
+  config: Record<string, unknown>,
+  label: string,
+  locale: string,
+): FlowNodeData {
+  const layout = portsOf({ type, config } as never);
+
+  return {
+    nodeType: type,
+    label,
+    summary: summarise(type, config, locale),
+    ports: layout.outputs.map((port) => ({
+      id: port.id,
+      label: port.label[locale === 'en' ? 'en' : 'pt-BR'],
+      fallback: port.fallback,
+    })),
+    acceptsInput: layout.acceptsInput,
+    locale,
+    config,
+  } as FlowNodeData;
+}
+
+/** The canvas shape read back as the domain sees it, for connection checks. */
+function asGraph(nodes: Node[], edges: Edge[]): Pick<FlowGraph, 'nodes' | 'edges'> {
+  return {
+    nodes: nodes.map((node) => {
+      const data = node.data as FlowNodeData & { config?: Record<string, unknown> };
+      return {
+        id: node.id,
+        type: data.nodeType,
+        position: node.position,
+        config: data.config ?? {},
+      };
+    }) as FlowGraph['nodes'],
+    edges: edges.map((edge) => ({
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      sourceHandle: portIdFromHandle(edge.sourceHandle),
+    })) as FlowGraph['edges'],
+  };
+}
 
 function summarise(type: string, config: Record<string, unknown>, locale: string): string {
   switch (type) {
@@ -197,6 +256,14 @@ function Builder() {
       ),
     enabled: Boolean(workspaceId),
   });
+  // Other automations this flow may hand a contact to. Itself excluded: the
+  // domain refuses that anyway, and offering it invites the mistake.
+  const automations = useQuery({
+    queryKey: ['automations', workspaceId],
+    queryFn: () => get<Array<{ id: string; name: string }>>('/automations'),
+    enabled: Boolean(workspaceId),
+    select: (list) => list.filter((item) => item.id !== automationId),
+  });
   const workspace = useQuery({
     queryKey: ['workspace-current', workspaceId],
     queryFn: () => get<{ plan: { features: string[] } | null }>('/workspaces/current'),
@@ -213,14 +280,12 @@ function Builder() {
         id: node.id,
         type: 'dmflow',
         position: node.position,
-        data: {
-          nodeType: node.type,
-          label: node.label ?? nodeLabel(node.type, locale),
-          summary: summarise(node.type, node.config, locale),
-          handles: NODE_HANDLES[node.type],
+        data: nodeData(
+          node.type,
+          node.config,
+          node.label ?? nodeLabel(node.type, locale),
           locale,
-          config: node.config,
-        } as FlowNodeData,
+        ),
       })),
     );
     setEdges(
@@ -228,7 +293,8 @@ function Builder() {
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        sourceHandle: edge.sourceHandle ?? undefined,
+        sourceHandle: handleId(edge.sourceHandle ?? null),
+        type: 'smoothstep',
         animated: true,
       })),
     );
@@ -252,7 +318,10 @@ function Builder() {
         id: edge.id,
         source: edge.source,
         target: edge.target,
-        sourceHandle: edge.sourceHandle ?? null,
+        // The canvas needs a string for every handle; the domain uses null for
+        // the unnamed exit. Translated here rather than in both directions all
+        // over the file.
+        sourceHandle: portIdFromHandle(edge.sourceHandle),
       })),
     }),
     [nodes, edges],
@@ -339,14 +408,7 @@ function Builder() {
           id,
           type: 'dmflow',
           position: placement,
-          data: {
-            nodeType: type,
-            label: nodeLabel(type, locale),
-            summary: '',
-            handles: NODE_HANDLES[type],
-            locale,
-            config: {},
-          } as FlowNodeData,
+          data: nodeData(type, defaultNodeConfig(type as never), nodeLabel(type, locale), locale),
         },
       ]);
       setSelectedId(id);
@@ -375,17 +437,120 @@ function Builder() {
   }, []);
 
   const updateSelectedConfig = (config: Record<string, unknown>) => {
+    if (!selectedId) return;
+
     setNodes((current) =>
       current.map((node) => {
         if (node.id !== selectedId) return node;
         const data = node.data as FlowNodeData;
-        return {
-          ...node,
-          data: { ...data, config, summary: summarise(data.nodeType, config, locale) },
-        };
+        // Exits are recomputed, not preserved: renaming a branch path has to
+        // rename its exit, and deleting one has to remove it.
+        return { ...node, data: nodeData(data.nodeType, config, data.label, locale) };
+      }),
+    );
+
+    // An exit that no longer exists takes its connection with it. Leaving the
+    // edge behind would draw a path the engine can never follow.
+    setEdges((current) =>
+      current.filter((edge) => {
+        if (edge.source !== selectedId) return true;
+        const type = (nodes.find((n) => n.id === selectedId)?.data as FlowNodeData | undefined)
+          ?.nodeType;
+        if (!type) return true;
+        return portsOf({ type, config } as never).outputs.some(
+          (port) => port.id === portIdFromHandle(edge.sourceHandle),
+        );
       }),
     );
   };
+
+  /**
+   * Decides whether a connection may be made, while the operator is still
+   * dragging it. Same function the server runs before storing the graph — the
+   * canvas is the fast answer, never the authority.
+   */
+  const isValidConnection = React.useCallback(
+    (connection: Connection | Edge) => {
+      if (!connection.source || !connection.target) return false;
+      return canConnect(asGraph(nodes, edges), {
+        source: connection.source,
+        sourceHandle: portIdFromHandle(connection.sourceHandle),
+        target: connection.target,
+      }).ok;
+    },
+    [nodes, edges],
+  );
+
+  const connect = React.useCallback(
+    (connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+
+      const check = canConnect(asGraph(nodes, edges), {
+        source: connection.source,
+        sourceHandle: portIdFromHandle(connection.sourceHandle),
+        target: connection.target,
+      });
+
+      if (!check.ok) {
+        // Saying why beats a connection that simply refuses to stick.
+        toast.error(CONNECTION_REJECTION_MESSAGES[check.reason!][locale === 'en' ? 'en' : 'pt-BR']);
+        return;
+      }
+
+      snapshot();
+      setEdges((current) =>
+        addEdge(
+          {
+            ...connection,
+            id: `e-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'smoothstep',
+            animated: true,
+          },
+          current,
+        ),
+      );
+    },
+    [nodes, edges, locale, setEdges, snapshot],
+  );
+
+  /** Dragging an existing connection to a different block. */
+  const reconnect = React.useCallback(
+    (oldEdge: Edge, connection: Connection) => {
+      if (!connection.source || !connection.target) return;
+
+      const check = canConnect(
+        asGraph(nodes, edges),
+        {
+          source: connection.source,
+          sourceHandle: portIdFromHandle(connection.sourceHandle),
+          target: connection.target,
+        },
+        // Without this the edge being moved would block its own replacement.
+        { ignoreEdgeId: oldEdge.id },
+      );
+
+      if (!check.ok) {
+        toast.error(CONNECTION_REJECTION_MESSAGES[check.reason!][locale === 'en' ? 'en' : 'pt-BR']);
+        return;
+      }
+
+      snapshot();
+      setEdges((current) =>
+        current.map((edge) =>
+          edge.id === oldEdge.id
+            ? {
+                ...edge,
+                source: connection.source!,
+                sourceHandle: connection.sourceHandle ?? null,
+                target: connection.target!,
+                targetHandle: connection.targetHandle ?? null,
+              }
+            : edge,
+        ),
+      );
+    },
+    [nodes, edges, locale, setEdges, snapshot],
+  );
 
   const deleteSelected = () => {
     if (!selectedId) return;
@@ -519,12 +684,9 @@ function Builder() {
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
-            onConnect={(connection: Connection) => {
-              snapshot();
-              setEdges((current) =>
-                addEdge({ ...connection, id: `e-${Date.now().toString(36)}`, animated: true }, current),
-              );
-            }}
+            onConnect={connect}
+            isValidConnection={isValidConnection}
+            onReconnect={reconnect}
             onNodeClick={(_, node) => setSelectedId(node.id)}
             onPaneClick={() => setSelectedId(null)}
             // History is recorded when a drag starts, so undo restores where the
@@ -588,6 +750,7 @@ function Builder() {
             tags={tags.data ?? []}
             fields={fields.data ?? []}
             members={members.data ?? []}
+            automations={automations.data ?? []}
             onChange={updateSelectedConfig}
             onDelete={deleteSelected}
           />

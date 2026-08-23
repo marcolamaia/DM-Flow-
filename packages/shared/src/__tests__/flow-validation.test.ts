@@ -133,7 +133,90 @@ describe('flow validation', () => {
       ),
       ctx(),
     );
-    expect(report.issues.map((i) => i.code)).toContain('CONDITION_MISSING_BRANCH');
+    const unconnected = report.issues.find((i) => i.code === 'PORT_NOT_CONNECTED');
+    expect(unconnected).toBeDefined();
+    // The message has to name the exit. "A condition is incomplete" sends the
+    // operator hunting; "the No exit is not connected" does not.
+    expect(unconnected!.message['pt-BR']).toContain('Não');
+    expect(unconnected!.nodeId).toBe('c');
+    expect(report.valid).toBe(false);
+  });
+
+  it('flags every unconnected exit of a branch, naming each path', () => {
+    // Branch nodes were unpublishable: the validator demanded each path be
+    // connected while the canvas drew no exits to connect them with.
+    const branch = {
+      id: 'b',
+      type: 'branch' as const,
+      position: { x: 0, y: 0 },
+      config: {
+        branches: [
+          {
+            id: 'p1',
+            label: 'Cliente',
+            predicate: { kind: 'condition', source: 'tag', field: 'tag-1', operator: 'is_set' },
+          },
+          {
+            id: 'p2',
+            label: 'Lead',
+            predicate: { kind: 'condition', source: 'tag', field: 'tag-1', operator: 'is_set' },
+          },
+        ],
+      },
+    };
+    const report = validateFlow(
+      graph(
+        [trigger, branch, end],
+        [
+          { id: 'e1', source: 't', target: 'b', sourceHandle: null },
+          { id: 'e2', source: 'b', target: 'e', sourceHandle: 'p1' },
+        ],
+      ),
+      ctx(),
+    );
+
+    const messages = report.issues
+      .filter((i) => i.code === 'PORT_NOT_CONNECTED')
+      .map((i) => i.message['pt-BR']);
+    expect(messages.some((m) => m.includes('Lead'))).toBe(true);
+
+    // The fallback exit left open is a deliberate stop, not an error.
+    const fallback = report.issues.find((i) => i.code === 'FALLBACK_PORT_NOT_CONNECTED');
+    expect(fallback?.severity).toBe('warning');
+  });
+
+  it('refuses a graph whose connection the engine could never follow', () => {
+    const report = validateFlow(
+      graph(
+        [trigger, message('m1'), message('m2'), end],
+        [
+          { id: 'e1', source: 't', target: 'm1', sourceHandle: null },
+          // Two edges leaving one exit: the engine follows the first and the
+          // second silently never runs.
+          { id: 'e2', source: 'm1', target: 'm2', sourceHandle: null },
+          { id: 'e3', source: 'm1', target: 'e', sourceHandle: null },
+        ],
+      ),
+      ctx(),
+    );
+
+    expect(report.valid).toBe(false);
+    expect(report.issues.map((i) => i.code)).toContain('INVALID_EDGE_PORT_FULL');
+  });
+
+  it('refuses an automation that starts itself', () => {
+    const handoff = {
+      id: 'h',
+      type: 'start_automation' as const,
+      position: { x: 0, y: 0 },
+      config: { automationId: 'auto-1', stopCurrent: true },
+    };
+    const report = validateFlow(
+      graph([trigger, handoff], [{ id: 'e1', source: 't', target: 'h', sourceHandle: null }]),
+      ctx({ automationId: 'auto-1', startableAutomationIds: new Set(['auto-1']) }),
+    );
+
+    expect(report.issues.map((i) => i.code)).toContain('START_AUTOMATION_SELF');
   });
 
   it('catches a reference to a tag that no longer exists', () => {

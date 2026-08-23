@@ -6,6 +6,7 @@ export * from './plans.js';
 export * from './capabilities.js';
 export * from './predicate.js';
 export * from './flow.js';
+export * from './ports.js';
 export * from './flow-validation.js';
 export * from './triggers.js';
 export * from './events.js';

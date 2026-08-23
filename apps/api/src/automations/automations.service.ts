@@ -4,7 +4,9 @@ import {
   DmFlowError,
   TRIGGER_DEFINITIONS,
   emptyGraph,
+  findInvalidEdges,
   flowGraphSchema,
+  pruneOrphanEdges,
   parseTriggerConfig,
   uuidv7,
   validateFlow,
@@ -173,7 +175,27 @@ export class AutomationsService {
     const automation = await this.prisma.automation.findUnique({ where: { id: automationId } });
     this.prisma.assertTenant(automation, workspaceId);
 
-    const parsed = flowGraphSchema.parse(graph);
+    // Ports and nodes that no longer exist take their edges with them. This is
+    // clean-up, not a rejection: deleting one path of a branch should not leave
+    // the operator unable to save.
+    const parsed = pruneOrphanEdges(flowGraphSchema.parse(graph));
+
+    // What is left has to be a graph the engine can actually walk. The canvas
+    // already refuses these while dragging, but the canvas is a convenience and
+    // this endpoint is reachable without it.
+    const impossible = findInvalidEdges(parsed);
+    if (impossible.length > 0) {
+      throw new DmFlowError('FLOW_INVALID', {
+        details: impossible.map(({ edge, reason }) => ({
+          edgeId: edge.id,
+          source: edge.source,
+          sourceHandle: edge.sourceHandle,
+          target: edge.target,
+          reason,
+        })),
+      });
+    }
+
     const report = await this.validate(workspaceId, automationId, parsed);
 
     let draftId = automation!.draftVersionId;
@@ -219,11 +241,15 @@ export class AutomationsService {
     automationId: string,
     graph: FlowGraph,
   ): Promise<ValidationReport> {
-    const [triggers, tags, fields, features] = await Promise.all([
+    const [triggers, tags, fields, features, automations] = await Promise.all([
       this.prisma.trigger.findMany({ where: { automationId } }),
       this.prisma.tag.findMany({ where: { workspaceId }, select: { id: true } }),
       this.prisma.customField.findMany({ where: { workspaceId }, select: { id: true, key: true } }),
       this.quota.featuresFor(workspaceId),
+      this.prisma.automation.findMany({
+        where: { workspaceId, deletedAt: null },
+        select: { id: true },
+      }),
     ]);
 
     const accountId = triggers.find((t) => t.connectedAccountId)?.connectedAccountId ?? undefined;
@@ -241,6 +267,8 @@ export class AutomationsService {
       customFieldIds: new Set(fields.map((f) => f.id)),
       knownTokens,
       hasTrigger: triggers.some((t) => t.enabled),
+      automationId,
+      startableAutomationIds: new Set(automations.map((a) => a.id)),
     });
   }
 

@@ -6,6 +6,13 @@ import { AlertTriangle, XCircle } from 'lucide-react';
 import { NODE_META } from './node-meta';
 import { cn } from '@/lib/utils';
 
+export interface NodePort {
+  /** null is the single unnamed exit. */
+  id: string | null;
+  label: string;
+  fallback?: boolean;
+}
+
 export interface FlowNodeData extends Record<string, unknown> {
   nodeType: string;
   label: string;
@@ -15,24 +22,42 @@ export interface FlowNodeData extends Record<string, unknown> {
   warnings?: string[];
   /** Live run counts, drawn as an overlay when analytics are loaded. */
   stats?: { entered: number; failed: number };
-  handles?: string[];
+  /** Exits this node has, read from the domain rather than guessed here. */
+  ports?: NodePort[];
+  acceptsInput?: boolean;
   locale: string;
 }
+
+/** React Flow needs a string id per handle; the unnamed exit gets a stable one. */
+export const DEFAULT_HANDLE = '__next';
+
+export const handleId = (portId: string | null): string => portId ?? DEFAULT_HANDLE;
+export const portIdFromHandle = (handle: string | null | undefined): string | null =>
+  !handle || handle === DEFAULT_HANDLE ? null : handle;
 
 /**
  * A node shows its own problems. Making the operator hunt through a separate error
  * list to find which block is broken is the difference between a builder that
  * teaches and one that frustrates.
+ *
+ * Exits are drawn from the ports the domain declares, never from a list kept here.
+ * The previous version hard-coded handles for one node type, which is why the
+ * branch node — whose entire purpose is several paths — had none at all.
  */
-export const FlowNode = memo(({ data, selected, type }: NodeProps) => {
+export const FlowNode = memo(({ data, selected }: NodeProps) => {
   const nodeData = data as FlowNodeData;
   const meta = NODE_META[nodeData.nodeType];
   const Icon = meta?.icon;
   const hasError = (nodeData.errors?.length ?? 0) > 0;
   const hasWarning = (nodeData.warnings?.length ?? 0) > 0;
   const isTrigger = nodeData.nodeType === 'trigger';
-  const isTerminal = nodeData.nodeType === 'end';
-  const handles = nodeData.handles ?? [];
+  const ports = nodeData.ports ?? [];
+  const acceptsInput = nodeData.acceptsInput !== false;
+
+  // One unnamed exit sits in the corner; named exits get their own labelled row,
+  // so "yes" and "no" are two visibly separate things rather than two lines
+  // leaving the same point.
+  const singleExit = ports.length === 1 && ports[0]!.id === null;
 
   return (
     <div
@@ -40,10 +65,15 @@ export const FlowNode = memo(({ data, selected, type }: NodeProps) => {
         'w-[236px] rounded-xl border bg-surface shadow-sm transition-colors',
         selected ? 'border-accent ring-2 ring-accent/20' : 'border-border',
         hasError && 'border-danger/60',
+        isTrigger && 'border-accent/50 bg-accent/[0.04]',
       )}
     >
-      {!isTrigger ? (
-        <Handle type="target" position={Position.Top} className="!-top-1.5" />
+      {acceptsInput ? (
+        <Handle
+          type="target"
+          position={Position.Top}
+          className="!-top-1.5 !size-2.5 !border-2 !border-border !bg-surface"
+        />
       ) : null}
 
       <div className="flex items-start gap-2.5 px-3 py-2.5">
@@ -93,38 +123,34 @@ export const FlowNode = memo(({ data, selected, type }: NodeProps) => {
         </div>
       ) : null}
 
-      {!isTerminal ? (
-        handles.length > 0 ? (
-          <div className="relative h-6 border-t border-border">
-            {handles.map((handle, index) => (
-              <div
-                key={handle}
-                className="absolute -bottom-1.5"
-                style={{ left: `${((index + 1) / (handles.length + 1)) * 100}%` }}
-              >
-                <span className="absolute -top-4 -translate-x-1/2 whitespace-nowrap text-[10px] text-subtle">
-                  {handle === 'true'
-                    ? nodeData.locale === 'en'
-                      ? 'yes'
-                      : 'sim'
-                    : handle === 'false'
-                      ? nodeData.locale === 'en'
-                        ? 'no'
-                        : 'não'
-                      : handle}
-                </span>
-                <Handle
-                  type="source"
-                  position={Position.Bottom}
-                  id={handle}
-                  style={{ position: 'relative', left: 0, transform: 'translateX(-50%)' }}
-                />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <Handle type="source" position={Position.Bottom} className="!-bottom-1.5" />
-        )
+      {singleExit ? (
+        <Handle
+          type="source"
+          id={DEFAULT_HANDLE}
+          position={Position.Bottom}
+          className="!-bottom-1.5 !size-2.5 !border-2 !border-border !bg-surface hover:!border-accent"
+        />
+      ) : ports.length > 0 ? (
+        <div className="border-t border-border">
+          {ports.map((port) => (
+            <div
+              key={port.id ?? DEFAULT_HANDLE}
+              className={cn(
+                'relative flex items-center justify-end border-b border-border/60 px-3 py-1.5 text-[11px] last:border-b-0',
+                port.fallback ? 'text-subtle' : 'text-muted',
+              )}
+            >
+              <span className="truncate">{port.label}</span>
+              <Handle
+                type="source"
+                id={handleId(port.id)}
+                position={Position.Right}
+                className="!size-2.5 !border-2 !border-border !bg-surface hover:!border-accent"
+                style={{ right: -5 }}
+              />
+            </div>
+          ))}
+        </div>
       ) : null}
     </div>
   );

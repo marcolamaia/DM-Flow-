@@ -6,6 +6,11 @@ import {
   type NodeType,
 } from './flow.js';
 import { extractTokens } from './interpolate.js';
+import {
+  CONNECTION_REJECTION_MESSAGES,
+  findInvalidEdges,
+  portsOf,
+} from './ports.js';
 import type { LocalizedMessage } from './locale.js';
 
 export type ValidationSeverity = 'error' | 'warning';
@@ -36,6 +41,10 @@ export interface ValidationContext {
   knownTokens: Set<string>;
   /** True when at least one trigger row is attached to this version. */
   hasTrigger: boolean;
+  /** The automation being validated, so it cannot hand off to itself. */
+  automationId?: string;
+  /** Automations in this workspace that a handoff node may target. */
+  startableAutomationIds?: Set<string>;
 }
 
 const err = (code: string, message: LocalizedMessage, nodeId?: string): ValidationIssue => ({
@@ -150,6 +159,19 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
     }
   }
 
+  // A connection can stop being possible without anybody touching it: a branch
+  // path gets deleted, and the edge that left it now describes a route the engine
+  // will never take.
+  for (const { edge, reason } of findInvalidEdges(graph)) {
+    issues.push({
+      severity: 'error',
+      code: `INVALID_EDGE_${reason}`,
+      edgeId: edge.id,
+      nodeId: edge.source,
+      message: CONNECTION_REJECTION_MESSAGES[reason],
+    });
+  }
+
   const trigger = triggers[0];
   if (trigger) {
     const reachable = reachableFrom(graph, trigger.id);
@@ -240,53 +262,72 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
       );
     }
 
-    if (!def.terminal && node.type !== 'condition' && node.type !== 'branch') {
-      if (outgoing(graph, node.id).length === 0) {
-        issues.push(
-          warn(
-            'NODE_HAS_NO_EXIT',
-            {
-              'pt-BR': 'Este node não leva a lugar nenhum. A execução termina aqui.',
-              en: 'This node leads nowhere. The execution ends here.',
-            },
-            node.id,
-          ),
-        );
-      }
-    }
+    // Exits are checked against the node's declared ports rather than a list of
+    // special cases, so a new node type with several paths is covered the day it
+    // is added instead of the day somebody remembers to extend this function.
+    const ports = portsOf(node);
+    const connectedHandles = new Set(outgoing(graph, node.id).map((e) => e.sourceHandle ?? null));
 
-    if (node.type === 'condition') {
-      const handles = new Set(outgoing(graph, node.id).map((e) => e.sourceHandle));
-      if (!handles.has('true') || !handles.has('false')) {
-        issues.push(
-          err(
-            'CONDITION_MISSING_BRANCH',
-            {
-              'pt-BR': 'Uma condição precisa dos dois caminhos ligados: verdadeiro e falso.',
-              en: 'A condition needs both paths connected: true and false.',
-            },
-            node.id,
-          ),
-        );
-      }
-    }
+    for (const port of ports.outputs) {
+      if (connectedHandles.has(port.id)) continue;
 
-    if (node.type === 'branch' && parsed.success) {
-      const config = parsed.data as { branches: Array<{ id: string }> };
-      const connected = new Set(outgoing(graph, node.id).map((e) => e.sourceHandle));
-      for (const branch of config.branches) {
-        if (!connected.has(branch.id)) {
-          issues.push(
-            err(
-              'BRANCH_NOT_CONNECTED',
+      // A fallback path left open is a deliberate "stop here if nothing matched",
+      // not a mistake — so it is worth pointing out, but it never blocks.
+      issues.push(
+        port.fallback
+          ? warn(
+              'FALLBACK_PORT_NOT_CONNECTED',
               {
-                'pt-BR': 'Um caminho da ramificação não está conectado.',
-                en: 'A branch path is not connected.',
+                'pt-BR': `A saída "${port.label['pt-BR']}" não leva a lugar nenhum. Quem cair nela sai da automação.`,
+                en: `The "${port.label.en}" exit leads nowhere. Anyone landing there leaves the automation.`,
               },
               node.id,
-            ),
-          );
-        }
+            )
+          : ports.outputs.length > 1
+            ? err(
+                'PORT_NOT_CONNECTED',
+                {
+                  'pt-BR': `A saída "${port.label['pt-BR']}" deste bloco não está ligada a nada.`,
+                  en: `This block's "${port.label.en}" exit is not connected to anything.`,
+                },
+                node.id,
+              )
+            : warn(
+                'NODE_HAS_NO_EXIT',
+                {
+                  'pt-BR': 'Este bloco não leva a lugar nenhum. A execução termina aqui.',
+                  en: 'This block leads nowhere. The execution ends here.',
+                },
+                node.id,
+              ),
+      );
+    }
+
+    if (node.type === 'start_automation' && parsed.success) {
+      const { automationId } = parsed.data as { automationId: string };
+
+      if (ctx.automationId && automationId === ctx.automationId) {
+        issues.push(
+          err(
+            'START_AUTOMATION_SELF',
+            {
+              'pt-BR': 'Uma automação não pode iniciar ela mesma. Escolha outra.',
+              en: 'An automation cannot start itself. Pick a different one.',
+            },
+            node.id,
+          ),
+        );
+      } else if (ctx.startableAutomationIds && !ctx.startableAutomationIds.has(automationId)) {
+        issues.push(
+          err(
+            'START_AUTOMATION_NOT_FOUND',
+            {
+              'pt-BR': 'A automação escolhida neste bloco não existe mais.',
+              en: 'The automation chosen in this block no longer exists.',
+            },
+            node.id,
+          ),
+        );
       }
     }
 

@@ -25,6 +25,19 @@ export type NodeOutcome =
   | { kind: 'continue'; handle?: string | null; output?: Record<string, unknown> }
   | { kind: 'wait'; resumeAt: Date; output?: Record<string, unknown> }
   | { kind: 'end'; output?: Record<string, unknown> }
+  /**
+   * Hand the contact to another automation.
+   *
+   * Returned as an outcome rather than started by the executor itself: starting a
+   * run is the engine's job, and having the executor call back into the engine
+   * would make the two depend on each other in a circle.
+   */
+  | {
+      kind: 'handoff';
+      automationId: string;
+      stopCurrent: boolean;
+      output?: Record<string, unknown>;
+    }
   | {
       kind: 'fail';
       errorCode: string;

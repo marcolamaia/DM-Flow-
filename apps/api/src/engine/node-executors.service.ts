@@ -55,6 +55,10 @@ export class NodeExecutorsService {
         return this.condition(config, ctx);
       case 'branch':
         return this.branch(config, ctx);
+      case 'randomizer':
+        return this.randomizer(node, config);
+      case 'start_automation':
+        return this.startAutomation(config);
       case 'delay':
         return this.delay(config, ctx);
       case 'add_tag':
@@ -332,7 +336,50 @@ export class NodeExecutorsService {
       }
     }
 
-    return { kind: 'end', output: { matched: null, reason: 'no_branch_matched' } };
+    // Falls through to the branch node's fallback exit. If that exit leads
+    // nowhere the run ends there, which is the same outcome as before — but now
+    // it is a path the operator can see and connect.
+    return { kind: 'continue', handle: 'otherwise', output: { matched: null } };
+  }
+
+  /**
+   * Weighted split.
+   *
+   * The draw is per execution and never re-run: a contact who reaches this node
+   * once has one answer, so a retry after a failed send downstream cannot move
+   * them to the other path mid-journey.
+   */
+  private randomizer(node: FlowNode, config: Record<string, unknown>): NodeOutcome {
+    const paths = config.paths as Array<{ id: string; label: string; weight: number }>;
+    const total = paths.reduce((sum, path) => sum + path.weight, 0);
+    if (total <= 0) {
+      return {
+        kind: 'fail',
+        errorCode: 'FLOW_NODE_INVALID',
+        errorDetail: { reason: 'randomizer weights add up to zero' },
+        retryable: false,
+      };
+    }
+
+    let roll = Math.random() * total;
+    for (const path of paths) {
+      roll -= path.weight;
+      if (roll < 0) {
+        return { kind: 'continue', handle: path.id, output: { chose: path.id } };
+      }
+    }
+
+    // Only reachable through floating-point drift at the very end of the range.
+    const last = paths[paths.length - 1]!;
+    return { kind: 'continue', handle: last.id, output: { chose: last.id } };
+  }
+
+  private startAutomation(config: Record<string, unknown>): NodeOutcome {
+    return {
+      kind: 'handoff',
+      automationId: String(config.automationId),
+      stopCurrent: config.stopCurrent !== false,
+    };
   }
 
   private async delay(
