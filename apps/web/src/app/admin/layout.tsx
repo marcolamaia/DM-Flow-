@@ -4,7 +4,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ClipboardList, CreditCard, LayoutDashboard, Users } from 'lucide-react';
+import { ArrowLeft, ClipboardList, CreditCard, LayoutDashboard, Users, Wallet, Webhook } from 'lucide-react';
 import { get } from '@/lib/api';
 import { useI18n, type MessageKey } from '@/lib/i18n';
 import { Badge, EmptyState, Spinner } from '@/components/ui/primitives';
@@ -24,6 +24,18 @@ const NAV: Array<{
     label: 'admin.nav.subscriptions',
     icon: CreditCard,
     permission: 'admin.subscriptions.read',
+  },
+  {
+    href: '/admin/finance',
+    label: 'admin.nav.finance',
+    icon: Wallet,
+    permission: 'admin.billing.read',
+  },
+  {
+    href: '/admin/webhooks',
+    label: 'admin.nav.webhooks',
+    icon: Webhook,
+    permission: 'admin.billing.read',
   },
   { href: '/admin/audit', label: 'admin.nav.audit', icon: ClipboardList, permission: 'admin.audit.read' },
 ];

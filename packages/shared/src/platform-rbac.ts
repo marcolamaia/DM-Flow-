@@ -153,3 +153,16 @@ export const REASON_REQUIRED: ReadonlySet<PlatformPermission> = new Set([
   // originally left out.
   'admin.admins.manage',
 ]);
+
+/**
+ * Actions that need a reason even though their permission does not always.
+ *
+ * `admin.jobs.manage` mostly covers operational work — retrying a queue job,
+ * clearing a stuck task — where demanding a justification each time would turn
+ * the trail into noise. Replaying a billing event is the exception: it changes
+ * what somebody is subscribed to, and that belongs to the same class as the
+ * actions above however it is reached.
+ */
+export const REASON_REQUIRED_ACTIONS: ReadonlySet<string> = new Set([
+  'billing.webhook_reprocessed',
+]);

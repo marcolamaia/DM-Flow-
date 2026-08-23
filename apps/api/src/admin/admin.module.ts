@@ -9,6 +9,10 @@ import { AdminOverviewController } from './admin-overview.controller';
 import { AdminUsersService } from './admin-users.service';
 import { AdminSubscriptionsService } from './admin-subscriptions.service';
 import { AuthModule } from '../auth/auth.module';
+import { BillingModule } from '../billing/billing.module';
+import { AdminFinanceController } from './admin-finance.controller';
+import { AdminFinanceService } from './admin-finance.service';
+import { AdminWebhooksService } from './admin-webhooks.service';
 
 /**
  * Global so that any service can record a domain event without importing the
@@ -17,8 +21,13 @@ import { AuthModule } from '../auth/auth.module';
  */
 @Global()
 @Module({
-  imports: [AuthModule],
-  controllers: [AdminController, MetricsController, AdminOverviewController],
+  imports: [AuthModule, BillingModule],
+  controllers: [
+    AdminController,
+    MetricsController,
+    AdminOverviewController,
+    AdminFinanceController,
+  ],
   providers: [
     AdminGuard,
     AdminAuditService,
@@ -26,6 +35,8 @@ import { AuthModule } from '../auth/auth.module';
     MetricsService,
     AdminUsersService,
     AdminSubscriptionsService,
+    AdminFinanceService,
+    AdminWebhooksService,
   ],
   exports: [DomainEventsService, AdminAuditService, MetricsService],
 })

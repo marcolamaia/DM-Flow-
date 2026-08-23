@@ -83,6 +83,32 @@ const audit = await page.textContent('body');
 check('registro de ações carrega', /Registro de ações/.test(audit));
 check('diz que é somente leitura', /Somente leitura/.test(audit));
 
+await page.goto('http://localhost:3000/admin/finance');
+await page.waitForLoadState('networkidle');
+await page.waitForTimeout(1200);
+const fin = await page.textContent('body');
+check('financeiro carrega', /Financeiro/.test(fin));
+check('mostra movimentação do período', /Movimenta/.test(fin));
+check('mostra receita por plano', /Receita por plano/.test(fin));
+// A failed charge is money that did not arrive; the screen has to say so where
+// somebody could otherwise read it as revenue running late.
+check('explica que cobrança falha não é receita', /Nunca entra na receita/.test(fin));
+
+await page.goto('http://localhost:3000/admin/webhooks');
+await page.waitForLoadState('networkidle');
+await page.waitForTimeout(1500);
+const wh = await page.textContent('body');
+check('webhooks carrega', /Webhooks e reconcilia/.test(wh));
+check('mostra saúde dos webhooks', /Sa.de dos webhooks/.test(wh));
+check('mostra a reconciliação', /Reconcilia/.test(wh));
+// The point of the whole reconciliation screen: never let "nothing found" and
+// "never looked" look the same.
+check(
+  'diz que a comparação com o Stripe não aconteceu',
+  /Só verificações locais|S. verifica..es locais/.test(wh) && /não aconteceu|n.o aconteceu/.test(wh),
+);
+check('cada divergência traz o que fazer', !/Reconcilia/.test(wh) || /O que fazer|Nenhuma divergência/.test(wh));
+
 // ── And now the check that matters most: somebody without the grant ──
 const customerEmail = `cliente-ui-${Date.now()}@test.local`;
 const guest = await browser.newContext();

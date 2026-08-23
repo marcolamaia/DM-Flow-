@@ -60,6 +60,18 @@ const BULK_OPERATIONS = [
  */
 const JUSTIFIED_SYSTEM_QUERIES: Array<{ file: string; model: string; operation: string; why: string }> = [
   {
+    file: 'src/admin/admin-finance.service.ts',
+    model: 'subscription',
+    operation: 'findMany',
+    why: "Platform-wide by definition: the revenue breakdown per plan, and the list of accounts the platform is failing to collect from, are both questions about every tenant at once. Reachable only through AdminGuard; the owner's address within them is gated behind admin.users.pii.",
+  },
+  {
+    file: 'src/admin/admin-webhooks.service.ts',
+    model: 'subscription',
+    operation: 'findMany',
+    why: "Reconciliation compares every subscription against the payment provider — a per-workspace filter would mean never noticing the accounts nobody thought to check. Reachable only through AdminGuard, and it returns findings, not tenant records.",
+  },
+  {
     file: 'src/admin/admin-subscriptions.service.ts',
     model: 'subscription',
     operation: 'findMany',

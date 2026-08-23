@@ -231,6 +231,18 @@ export class BillingService {
     return { received: true };
   }
 
+  /**
+   * Runs a stored event through the handler again.
+   *
+   * Exposed for the administrative reprocess button, and deliberately narrow: it
+   * takes an event the platform already received and verified, never anything
+   * assembled by a caller. Safe to repeat because every branch of the handler
+   * writes the state Stripe describes rather than incrementing anything.
+   */
+  async replayStoredEvent(event: Stripe.Event): Promise<void> {
+    await this.applyEvent(event);
+  }
+
   private async applyEvent(event: Stripe.Event): Promise<void> {
     switch (event.type) {
       case 'checkout.session.completed': {

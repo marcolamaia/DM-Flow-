@@ -281,3 +281,75 @@ export interface AdminAuditEntry {
   createdAt: string;
   actor: { id: string; name: string; email: string } | null;
 }
+
+export interface PlanBreakdownRow {
+  code: string;
+  name: string;
+  currency: string;
+  unitCents: number;
+  activeCount: number;
+  atRiskCount: number;
+  mrrCents: number;
+}
+
+export interface Cashflow {
+  period: { from: string; to: string; timeZone: string };
+  received: MoneyByCurrency;
+  refunded: MoneyByCurrency;
+  chargedBack: MoneyByCurrency;
+  failed: MoneyByCurrency;
+  net: MoneyByCurrency;
+  succeededCount: number;
+  failedCount: number;
+  series: Array<{ day: string; received: number; refunded: number; failed: number }>;
+}
+
+export interface CollectionProblem {
+  workspaceId: string;
+  workspaceName: string;
+  workspaceStatus: string;
+  ownerEmail: string | null;
+  status: string;
+  plan: string;
+  currency: string;
+  monthlyCents: number;
+  pastDueSince: string | null;
+  graceEndsAt: string | null;
+  graceDaysRemaining: number | null;
+  lastPaymentError: string | null;
+}
+
+export interface WebhookHealth {
+  configured: boolean;
+  total: number;
+  processed: number;
+  failed: number;
+  pending: number;
+  stuck: number;
+  stuckAfterMinutes: number;
+  lastReceivedAt: string | null;
+  lastProcessedAt: string | null;
+}
+
+export interface WebhookRow {
+  id: string;
+  type: string;
+  workspaceId: string | null;
+  processedAt: string | null;
+  error: string | null;
+  createdAt: string;
+}
+
+export interface ReconciliationReport {
+  checkedAt: string;
+  localChecked: boolean;
+  stripeChecked: boolean;
+  stripeSkippedReason: string | null;
+  findings: Array<{
+    code: string;
+    severity: 'error' | 'warning';
+    workspaceId: string | null;
+    detail: string;
+    suggestion: string;
+  }>;
+}

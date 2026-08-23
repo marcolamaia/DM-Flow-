@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   DmFlowError,
   REASON_REQUIRED,
+  REASON_REQUIRED_ACTIONS,
   uuidv7,
   type PlatformPermission,
   type PlatformRole,
@@ -44,8 +45,10 @@ export class AdminAuditService {
    * Call before performing the action. Throws when a required reason is absent
    * or too thin to mean anything.
    */
-  assertReason(permission: PlatformPermission, reason?: string): void {
-    if (!REASON_REQUIRED.has(permission)) return;
+  assertReason(permission: PlatformPermission, reason?: string, action?: string): void {
+    // Either the permission always demands one, or this particular action does.
+    const required = REASON_REQUIRED.has(permission) || (action ? REASON_REQUIRED_ACTIONS.has(action) : false);
+    if (!required) return;
 
     const trimmed = reason?.trim() ?? '';
     if (trimmed.length < 8) {
@@ -63,7 +66,7 @@ export class AdminAuditService {
   }
 
   async record(input: AdminActionInput): Promise<void> {
-    this.assertReason(input.permission, input.reason);
+    this.assertReason(input.permission, input.reason, input.action);
 
     try {
       await this.prisma.auditLog.create({
