@@ -2,6 +2,8 @@ export * from './ids.js';
 export * from './locale.js';
 export * from './errors.js';
 export * from './rbac.js';
+export * from './platform-rbac.js';
+export * from './domain-events.js';
 export * from './plans.js';
 export * from './capabilities.js';
 export * from './predicate.js';

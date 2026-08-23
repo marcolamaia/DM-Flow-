@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import type { MemberRole, Locale } from '@dmflow/shared';
+import type { Locale, MemberRole, PlatformRole } from '@dmflow/shared';
 
 export interface AuthenticatedUser {
   id: string;
@@ -24,5 +24,11 @@ export interface DmFlowRequest extends Request {
   user?: AuthenticatedUser;
   sessionId?: string;
   workspace?: WorkspaceContext;
+  /**
+   * Set only on administrative routes, by AdminGuard, from a grant in the
+   * database. Separate from `workspace.role`: operating the platform and being
+   * an owner of one workspace are different things.
+   */
+  platformAdmin?: { role: PlatformRole; grantId: string };
   rawBody?: Buffer;
 }

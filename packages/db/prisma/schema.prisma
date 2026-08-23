@@ -142,6 +142,18 @@ enum ActorType {
   USER
   SYSTEM
   AUTOMATION
+  /// Somebody operating the platform, not a member of the workspace they acted on.
+  PLATFORM_ADMIN
+}
+
+enum PlatformRole {
+  SUPER_ADMIN
+  ADMIN
+  FINANCE
+  SUPPORT
+  DEVELOPER
+  ANALYST
+  READ_ONLY
 }
 
 enum DataSubjectRequestType {
@@ -182,6 +194,8 @@ model User {
   notes         ConversationNote[]
   passwordResets PasswordResetToken[]
   emailVerifications EmailVerificationToken[]
+  platformAdmin      PlatformAdmin?  @relation("PlatformAdminUser")
+  platformGrants     PlatformAdmin[] @relation("PlatformAdminGrantedBy")
 
   @@index([email])
 }
@@ -276,6 +290,7 @@ model Workspace {
   usageCounters     UsageCounter[]
   dataSubjectRequests DataSubjectRequest[]
   paymentEvents     StripeEvent[]
+  domainEvents      DomainEvent[]
 
   @@index([status])
 }
@@ -901,6 +916,8 @@ model AuditLog {
   entityId    String?
   before      Json?
   after       Json?
+  /// Why, for the actions where "who and when" is not enough on its own.
+  reason      String?
   ip          String?
   userAgent   String?
   createdAt   DateTime  @default(now())
@@ -910,6 +927,59 @@ model AuditLog {
 
   @@index([workspaceId, createdAt(sort: Desc)])
   @@index([entityType, entityId])
+}
+
+/// Who may operate the platform itself.
+///
+/// A row here, granted explicitly, rather than a flag on the user — a boolean
+/// column on User is one accidental update away from handing somebody every
+/// account on the platform.
+model PlatformAdmin {
+  id        String       @id
+  userId    String       @unique
+  role      PlatformRole
+  /// Who granted this, so the chain of trust is auditable.
+  grantedById String?
+  grantedAt DateTime     @default(now())
+  /// Revoked rather than deleted: the history of who had access matters.
+  revokedAt DateTime?
+  lastSeenAt DateTime?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user      User  @relation("PlatformAdminUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("PlatformAdminGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@index([role])
+  @@index([revokedAt])
+}
+
+/// Append-only log of what happened, when, and what it was worth at the time.
+///
+/// The panel reads from here for anything historical. Current state lives in its
+/// own tables; this exists for the questions those tables cannot answer after the
+/// fact — what MRR was in March, why a customer churned, what a payment was worth
+/// before the plan's price changed.
+model DomainEvent {
+  id          String   @id
+  event       String
+  workspaceId String?
+  userId      String?
+  /// Who caused it, when that differs from who it is about.
+  actorUserId String?
+  /// Smallest unit of the currency, recorded at the time rather than looked up.
+  amountCents Int?
+  currency    String?
+  properties  Json     @default("{}")
+  occurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@index([event, occurredAt(sort: Desc)])
+  @@index([workspaceId, occurredAt(sort: Desc)])
+  @@index([userId, occurredAt(sort: Desc)])
+  @@index([occurredAt(sort: Desc)])
 }
 
 model ApiKey {
