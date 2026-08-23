@@ -204,6 +204,48 @@ describe('flow validation', () => {
     expect(report.issues.map((i) => i.code)).toContain('INVALID_EDGE_PORT_FULL');
   });
 
+  it('names the setting that is missing instead of saying the block is invalid', () => {
+    // "This block is incomplete" sends the operator hunting through a panel.
+    // "Choose a tag" is something they can act on straight away.
+    const addTag = {
+      id: 'a',
+      type: 'add_tag' as const,
+      position: { x: 0, y: 0 },
+      config: {},
+    };
+    const report = validateFlow(
+      graph([trigger, addTag], [{ id: 'e1', source: 't', target: 'a', sourceHandle: null }]),
+      ctx(),
+    );
+
+    const issue = report.issues.find((i) => i.code === 'NODE_CONFIG_INVALID');
+    expect(issue?.message['pt-BR']).toContain('tag');
+    expect(issue?.message.en).toContain('tag');
+    // The schema path itself must never reach the interface.
+    expect(issue?.message['pt-BR']).not.toContain('tagId');
+  });
+
+  it('says the randomiser weights do not add up, in words', () => {
+    const randomizer = {
+      id: 'r',
+      type: 'randomizer' as const,
+      position: { x: 0, y: 0 },
+      config: {
+        paths: [
+          { id: 'a', label: 'A', weight: 30 },
+          { id: 'b', label: 'B', weight: 30 },
+        ],
+      },
+    };
+    const report = validateFlow(
+      graph([trigger, randomizer], [{ id: 'e1', source: 't', target: 'r', sourceHandle: null }]),
+      ctx(),
+    );
+
+    const issue = report.issues.find((i) => i.code === 'NODE_CONFIG_INVALID');
+    expect(issue?.message['pt-BR']).toContain('100%');
+  });
+
   it('refuses an automation that starts itself', () => {
     const handoff = {
       id: 'h',

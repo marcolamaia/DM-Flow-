@@ -114,6 +114,62 @@ function findDelaylessCycles(graph: FlowGraph, nodesById: Map<string, FlowNode>)
   return cycles;
 }
 
+/**
+ * What a schema failure means to somebody using the builder.
+ *
+ * Zod reports the path that failed; this turns the paths a person can actually
+ * fix into an instruction. Anything not listed falls back to a generic message
+ * rather than leaking a schema path into the interface.
+ */
+function describeConfigIssue(
+  type: NodeType,
+  issue: { path: Array<string | number>; message: string },
+): LocalizedMessage | null {
+  const field = issue.path[0];
+
+  if (field === 'tagId') {
+    return { 'pt-BR': 'Escolha uma tag.', en: 'Choose a tag.' };
+  }
+  if (field === 'customFieldId') {
+    return { 'pt-BR': 'Escolha um campo personalizado.', en: 'Choose a custom field.' };
+  }
+  if (field === 'automationId') {
+    return { 'pt-BR': 'Escolha a automação a iniciar.', en: 'Choose the automation to start.' };
+  }
+  if (field === 'predicate') {
+    return { 'pt-BR': 'Defina a condição.', en: 'Set the condition.' };
+  }
+  if (field === 'url') {
+    return { 'pt-BR': 'Informe uma URL válida.', en: 'Enter a valid URL.' };
+  }
+  if (field === 'message') {
+    return { 'pt-BR': 'Escreva a mensagem do aviso.', en: 'Write the notification message.' };
+  }
+  if (field === 'blocks') {
+    return {
+      'pt-BR': 'Escreva o texto da mensagem ou anexe uma mídia.',
+      en: 'Write the message text or attach media.',
+    };
+  }
+  if (field === 'branches') {
+    return {
+      'pt-BR': 'Cada caminho da ramificação precisa de uma regra.',
+      en: 'Every branch path needs a rule.',
+    };
+  }
+  if (field === 'paths' || issue.message.includes('add up to 100')) {
+    return {
+      'pt-BR': 'As porcentagens do randomizador precisam somar 100%.',
+      en: 'The randomiser percentages must add up to 100%.',
+    };
+  }
+  if (type === 'delay' && issue.message.includes('untilDate')) {
+    return { 'pt-BR': 'Escolha a data de retomada.', en: 'Choose the date to resume on.' };
+  }
+
+  return null;
+}
+
 export function validateFlow(graph: FlowGraph, ctx: ValidationContext): ValidationReport {
   const issues: ValidationIssue[] = [];
   const nodesById = new Map(graph.nodes.map((n) => [n.id, n]));
@@ -123,14 +179,14 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
   if (triggers.length === 0) {
     issues.push(
       err('NO_TRIGGER_NODE', {
-        'pt-BR': 'O fluxo precisa de um node de gatilho.',
+        'pt-BR': 'O fluxo precisa de um bloco de gatilho.',
         en: 'The flow needs a trigger node.',
       }),
     );
   } else if (triggers.length > 1) {
     issues.push(
       err('MULTIPLE_TRIGGER_NODES', {
-        'pt-BR': 'O fluxo deve ter apenas um node de gatilho.',
+        'pt-BR': 'O fluxo deve ter apenas um bloco de gatilho.',
         en: 'The flow must have exactly one trigger node.',
       }),
     );
@@ -152,7 +208,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
         code: 'DANGLING_EDGE',
         edgeId: edge.id,
         message: {
-          'pt-BR': 'Existe uma conexão apontando para um node que não existe.',
+          'pt-BR': 'Existe uma conexão apontando para um bloco que não existe.',
           en: 'There is a connection pointing to a node that does not exist.',
         },
       });
@@ -181,7 +237,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
           warn(
             'UNREACHABLE_NODE',
             {
-              'pt-BR': 'Este node não é alcançável a partir do gatilho.',
+              'pt-BR': 'Nada leva até este bloco. Ele nunca vai rodar.',
               en: 'This node cannot be reached from the trigger.',
             },
             node.id,
@@ -197,7 +253,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
         'CYCLE_WITHOUT_DELAY',
         {
           'pt-BR':
-            'Existe um laço sem espera neste caminho. Adicione um node de espera ou quebre o laço.',
+            'Existe um laço sem espera neste caminho. Adicione um bloco de espera ou quebre o laço.',
           en: 'There is a loop with no delay on this path. Add a delay node or break the loop.',
         },
         cycle[0],
@@ -212,7 +268,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
       issues.push(
         err(
           'UNKNOWN_NODE_TYPE',
-          { 'pt-BR': 'Tipo de node desconhecido.', en: 'Unknown node type.' },
+          { 'pt-BR': 'Tipo de bloco desconhecido.', en: 'Unknown node type.' },
           node.id,
         ),
       );
@@ -221,13 +277,28 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
 
     const parsed = parseNodeConfig(node.type, node.config);
     if (!parsed.success) {
+      // Name the setting that is wrong. "This block is incomplete" sends the
+      // operator hunting through a panel; "choose a tag" is something they can
+      // act on immediately.
+      const missing = parsed.error.issues
+        .map((issue) => describeConfigIssue(node.type as NodeType, issue))
+        .filter((entry, index, all): entry is LocalizedMessage => {
+          if (!entry) return false;
+          return all.findIndex((other) => other?.['pt-BR'] === entry['pt-BR']) === index;
+        });
+
       issues.push(
         err(
           'NODE_CONFIG_INVALID',
-          {
-            'pt-BR': 'A configuração deste node está incompleta ou inválida.',
-            en: 'This node’s configuration is incomplete or invalid.',
-          },
+          missing.length > 0
+            ? {
+                'pt-BR': missing.map((entry) => entry['pt-BR']).join(' · '),
+                en: missing.map((entry) => entry.en).join(' · '),
+              }
+            : {
+                'pt-BR': 'A configuração deste bloco está incompleta ou inválida.',
+                en: 'This block’s configuration is incomplete or invalid.',
+              },
           node.id,
         ),
       );
@@ -254,7 +325,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
         err(
           'FEATURE_NOT_IN_PLAN',
           {
-            'pt-BR': 'Este node não está incluído no seu plano atual.',
+            'pt-BR': 'Este bloco não está incluído no seu plano atual.',
             en: 'This node is not included in your current plan.',
           },
           node.id,
@@ -338,7 +409,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
           err(
             'TAG_NOT_FOUND',
             {
-              'pt-BR': 'A tag usada neste node não existe mais.',
+              'pt-BR': 'A tag usada neste bloco não existe mais.',
               en: 'The tag used by this node no longer exists.',
             },
             node.id,
@@ -357,7 +428,7 @@ export function validateFlow(graph: FlowGraph, ctx: ValidationContext): Validati
           err(
             'CUSTOM_FIELD_NOT_FOUND',
             {
-              'pt-BR': 'O campo personalizado usado neste node não existe mais.',
+              'pt-BR': 'O campo personalizado usado neste bloco não existe mais.',
               en: 'The custom field used by this node no longer exists.',
             },
             node.id,

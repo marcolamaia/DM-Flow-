@@ -19,7 +19,16 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowLeft, CheckCircle2, Redo2, Rocket, TriangleAlert, Undo2, Zap } from 'lucide-react';
+import {
+  ArrowLeft,
+  CheckCircle2,
+  ChevronDown,
+  Redo2,
+  Rocket,
+  TriangleAlert,
+  Undo2,
+  Zap,
+} from 'lucide-react';
 // Imported by subpath rather than from the package root: the root barrel also
 // pulls in id generation, which reaches for node:crypto and cannot be bundled
 // for a browser.
@@ -40,6 +49,7 @@ import {
 import { Inspector } from '@/components/flow/inspector';
 import { NODE_META, nodeLabel } from '@/components/flow/node-meta';
 import { NodeCatalog, useCatalog } from '@/components/flow/node-catalog';
+import { BuilderLookupsProvider } from '@/components/flow/builder-context';
 import { autoLayout } from '@/components/flow/auto-layout';
 import { CanvasToolbar } from '@/components/flow/canvas-toolbar';
 import { cn } from '@/lib/utils';
@@ -144,7 +154,6 @@ function nodeData(
   return {
     nodeType: type,
     label,
-    summary: summarise(type, config, locale),
     ports: layout.outputs.map((port) => ({
       id: port.id,
       label: port.label[locale === 'en' ? 'en' : 'pt-BR'],
@@ -177,33 +186,6 @@ function asGraph(nodes: Node[], edges: Edge[]): Pick<FlowGraph, 'nodes' | 'edges
   };
 }
 
-function summarise(type: string, config: Record<string, unknown>, locale: string): string {
-  switch (type) {
-    case 'send_message': {
-      const blocks = config.blocks as Array<{ text?: string }> | undefined;
-      const text = blocks?.[0]?.text ?? '';
-      const prefix = config.asPrivateReply ? (locale === 'en' ? 'private · ' : 'privada · ') : '';
-      return text ? prefix + text.slice(0, 70) : locale === 'en' ? 'No text yet' : 'Sem texto ainda';
-    }
-    case 'delay': {
-      const unit = String(config.unit ?? 'hours');
-      const unitLabel =
-        locale === 'en'
-          ? unit
-          : unit === 'minutes'
-            ? 'min'
-            : unit === 'hours'
-              ? 'horas'
-              : 'dias';
-      return `${config.amount ?? 1} ${unitLabel}`;
-    }
-    case 'http_request':
-      return `${config.method ?? 'POST'} ${String(config.url ?? '').slice(0, 50)}`;
-    default:
-      return '';
-  }
-}
-
 function Builder() {
   const params = useParams<{ id: string }>();
   const automationId = params.id;
@@ -214,7 +196,7 @@ function Builder() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-  const { screenToFlowPosition, fitView, zoomIn, zoomOut } = useReactFlow();
+  const { screenToFlowPosition, fitView, zoomIn, zoomOut, setCenter } = useReactFlow();
 
   /**
    * Undo history. Snapshots are pushed on discrete actions — adding, deleting,
@@ -946,6 +928,46 @@ function Builder() {
 
   const catalog = useCatalog(capabilities.data ?? [], workspace.data?.plan?.features ?? [], locale);
 
+  const [issuesOpen, setIssuesOpen] = React.useState(false);
+
+  const lookups = React.useMemo(
+    () => ({
+      tags: tags.data ?? [],
+      fields: fields.data ?? [],
+      members: members.data ?? [],
+      automations: automations.data ?? [],
+      triggers: detail.data?.triggers ?? [],
+    }),
+    [tags.data, fields.data, members.data, automations.data, detail.data?.triggers],
+  );
+
+  const nodeTitle = React.useCallback(
+    (nodeId: string) =>
+      (nodes.find((node) => node.id === nodeId)?.data as FlowNodeData | undefined)?.label ?? nodeId,
+    [nodes],
+  );
+
+  /**
+   * Takes the operator to the block a problem is about.
+   *
+   * A list of problems that only names them leaves the operator hunting across a
+   * canvas they may have scrolled far away from — so clicking one centres it,
+   * selects it, and opens its configuration.
+   */
+  const revealNode = React.useCallback(
+    (nodeId: string) => {
+      const node = nodes.find((entry) => entry.id === nodeId);
+      if (!node) return;
+
+      setSelectedId(nodeId);
+      setNodes((current) =>
+        current.map((entry) => ({ ...entry, selected: entry.id === nodeId })),
+      );
+      setCenter(node.position.x + 118, node.position.y + 60, { zoom: 1, duration: 400 });
+    },
+    [nodes, setNodes, setCenter],
+  );
+
   const hasSelection = React.useMemo(
     () =>
       nodes.some(
@@ -981,6 +1003,7 @@ function Builder() {
   }
 
   return (
+    <BuilderLookupsProvider value={lookups}>
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="flex min-w-0 items-center gap-3">
@@ -1247,39 +1270,82 @@ function Builder() {
           ) : null}
 
           {report ? (
-            <div className="pointer-events-none absolute bottom-4 left-4 z-10">
+            <div className="absolute bottom-4 left-4 z-10 w-[320px] max-w-[calc(100%-2rem)]">
               <div
                 className={cn(
-                  'pointer-events-auto rounded-lg border px-3 py-2 text-[12px] shadow-sm',
+                  'overflow-hidden rounded-lg border text-[12px] shadow-sm',
                   errorCount > 0
-                    ? 'border-danger/30 bg-danger/10 text-danger'
+                    ? 'border-danger/30 bg-danger/10'
                     : warningCount > 0
-                      ? 'border-warning/30 bg-warning/10 text-warning'
-                      : 'border-success/30 bg-success/10 text-success',
+                      ? 'border-warning/30 bg-warning/10'
+                      : 'border-success/30 bg-success/10',
                 )}
               >
-                <div className="flex items-center gap-1.5">
-                  {errorCount > 0 ? (
-                    <TriangleAlert className="size-3.5" />
-                  ) : (
-                    <CheckCircle2 className="size-3.5" />
+                <button
+                  type="button"
+                  onClick={() => setIssuesOpen((open) => !open)}
+                  disabled={report.issues.length === 0}
+                  className={cn(
+                    'flex w-full items-center gap-1.5 px-3 py-2 text-left',
+                    errorCount > 0
+                      ? 'text-danger'
+                      : warningCount > 0
+                        ? 'text-warning'
+                        : 'text-success',
                   )}
-                  <span className="font-medium">
+                >
+                  {errorCount > 0 ? (
+                    <TriangleAlert className="size-3.5 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="size-3.5 shrink-0" />
+                  )}
+                  <span className="flex-1 font-medium">
                     {errorCount > 0
                       ? `${errorCount} ${t('builder.validation.errors')}`
                       : warningCount > 0
                         ? `${warningCount} ${t('builder.validation.warnings')}`
                         : t('builder.validation.ok')}
                   </span>
-                </div>
-                {report.issues
-                  .filter((i) => !i.nodeId)
-                  .slice(0, 3)
-                  .map((issue) => (
-                    <p key={issue.code} className="mt-1 opacity-90">
-                      {issue.message[locale]}
-                    </p>
-                  ))}
+                  {report.issues.length > 0 ? (
+                    <ChevronDown
+                      className={cn('size-3.5 shrink-0 transition-transform', issuesOpen && 'rotate-180')}
+                    />
+                  ) : null}
+                </button>
+
+                {issuesOpen && report.issues.length > 0 ? (
+                  <div className="max-h-[240px] overflow-y-auto border-t border-current/15 bg-surface">
+                    {report.issues.map((issue, index) => (
+                      <button
+                        key={`${issue.code}-${issue.nodeId ?? index}`}
+                        type="button"
+                        onClick={() => issue.nodeId && revealNode(issue.nodeId)}
+                        disabled={!issue.nodeId}
+                        className={cn(
+                          'flex w-full items-start gap-2 border-b border-border/60 px-3 py-2 text-left last:border-b-0',
+                          issue.nodeId ? 'hover:bg-elevated' : 'cursor-default',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'mt-1 size-1.5 shrink-0 rounded-full',
+                            issue.severity === 'error' ? 'bg-danger' : 'bg-warning',
+                          )}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-[11.5px] leading-snug text-fg">
+                            {issue.message[locale]}
+                          </span>
+                          {issue.nodeId ? (
+                            <span className="mt-0.5 block truncate text-[10.5px] text-subtle">
+                              {nodeTitle(issue.nodeId)}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           ) : null}
@@ -1306,6 +1372,7 @@ function Builder() {
         existing={detail.data?.triggers ?? []}
       />
     </div>
+    </BuilderLookupsProvider>
   );
 }
 

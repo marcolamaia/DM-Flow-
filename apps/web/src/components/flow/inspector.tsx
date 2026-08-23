@@ -4,7 +4,8 @@ import * as React from 'react';
 import { Trash2 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { Button, Field, Input, Label, Select, Textarea } from '@/components/ui/primitives';
-import { nodeLabel } from './node-meta';
+import { NODE_DEFINITIONS, type NodeType } from '@dmflow/shared/flow';
+import { NODE_META, nodeLabel } from './node-meta';
 import { cn } from '@/lib/utils';
 import type { Tag, CustomField } from '@/lib/types';
 
@@ -48,11 +49,24 @@ export function Inspector({
   }
 
   const set = (patch: Record<string, unknown>) => onChange({ ...node.config, ...patch });
+  const meta = NODE_META[node.type];
+  const Icon = meta?.icon;
+  // The block's own description, so the panel says what this step does rather
+  // than only naming it.
+  const description = NODE_DEFINITIONS[node.type as NodeType]?.description[
+    locale === 'en' ? 'en' : 'pt-BR'
+  ];
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
-        <p className="text-[13px] font-medium">{nodeLabel(node.type, locale)}</p>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+        {Icon ? <Icon className={cn('size-4 shrink-0', meta?.tone)} /> : null}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium">{nodeLabel(node.type, locale)}</p>
+          {description ? (
+            <p className="mt-0.5 truncate text-[11px] text-subtle">{description}</p>
+          ) : null}
+        </div>
         {node.type !== 'trigger' ? (
           <Button
             variant="ghost"
