@@ -430,6 +430,28 @@ export const messages = {
     'admin.rec.suggestion': 'O que fazer',
     'admin.rec.checkedAt': 'Verificado em',
     'admin.rec.recheck': 'Verificar de novo',
+
+    // ── Recuperar a senha ──
+    'auth.forgot.link': 'Esqueci minha senha',
+    'auth.forgot.title': 'Recuperar sua senha',
+    'auth.forgot.subtitle': 'Digite o e-mail da sua conta. Se existir uma conta com ele, enviamos um link para criar uma senha nova.',
+    'auth.forgot.submit': 'Enviar link',
+    'auth.forgot.sent': 'Se existir uma conta com esse e-mail, o link já está a caminho. Confira sua caixa de entrada e o spam.',
+    'auth.forgot.sentHint': 'O link vale por 1 hora e só pode ser usado uma vez.',
+    'auth.forgot.backToLogin': 'Voltar para o login',
+
+    'auth.reset.title': 'Criar uma senha nova',
+    'auth.reset.subtitle': 'Escolha a senha que você vai usar a partir de agora.',
+    'auth.reset.newPassword': 'Nova senha',
+    'auth.reset.confirmPassword': 'Repita a nova senha',
+    'auth.reset.mismatch': 'As duas senhas não são iguais.',
+    'auth.reset.submit': 'Salvar nova senha',
+    'auth.reset.done': 'Senha alterada.',
+    'auth.reset.doneHint': 'Todos os aparelhos que estavam conectados foram desconectados, inclusive este. Entre de novo com a senha nova.',
+    'auth.reset.goToLogin': 'Entrar',
+    'auth.reset.missingToken': 'Este link está incompleto. Peça um novo na tela de login.',
+    'auth.reset.failed': 'Este link não vale mais. Ele expira em 1 hora e só funciona uma vez — peça outro na tela de login.',
+    'auth.reset.requestAnother': 'Pedir um link novo',
   },
 
   en: {
@@ -852,6 +874,28 @@ export const messages = {
     'admin.rec.suggestion': 'What to do',
     'admin.rec.checkedAt': 'Checked at',
     'admin.rec.recheck': 'Check again',
+
+    // ── Password recovery ──
+    'auth.forgot.link': 'Forgot my password',
+    'auth.forgot.title': 'Recover your password',
+    'auth.forgot.subtitle': 'Enter your account email. If an account exists with it, we send a link to create a new password.',
+    'auth.forgot.submit': 'Send link',
+    'auth.forgot.sent': 'If an account exists with that email, the link is already on its way. Check your inbox and your spam folder.',
+    'auth.forgot.sentHint': 'The link lasts 1 hour and works once.',
+    'auth.forgot.backToLogin': 'Back to sign in',
+
+    'auth.reset.title': 'Create a new password',
+    'auth.reset.subtitle': 'Choose the password you will use from now on.',
+    'auth.reset.newPassword': 'New password',
+    'auth.reset.confirmPassword': 'Repeat the new password',
+    'auth.reset.mismatch': 'The two passwords do not match.',
+    'auth.reset.submit': 'Save new password',
+    'auth.reset.done': 'Password changed.',
+    'auth.reset.doneHint': 'Every device that was signed in has been signed out, including this one. Sign in again with the new password.',
+    'auth.reset.goToLogin': 'Sign in',
+    'auth.reset.missingToken': 'This link is incomplete. Request a new one from the sign-in screen.',
+    'auth.reset.failed': 'This link is no longer valid. It expires after 1 hour and works once — request another from the sign-in screen.',
+    'auth.reset.requestAnother': 'Request a new link',
   },
 } as const;
 

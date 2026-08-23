@@ -113,6 +113,14 @@ function LoginForm() {
             <Button type="submit" className="w-full" loading={loading}>
               {t('auth.submit.login')}
             </Button>
+
+            {/* Without this, somebody who forgets their password has no way back
+                in at all — the recovery flow existed and nothing pointed at it. */}
+            <p className="mt-4 text-center text-[13px]">
+              <Link href="/forgot-password" className="text-muted hover:text-fg hover:underline">
+                {t('auth.forgot.link')}
+              </Link>
+            </p>
           </form>
         </Card>
 
