@@ -757,15 +757,29 @@ function Builder() {
     for (const node of nodes) {
       if ((node.data as FlowNodeData).nodeType === 'trigger') doomed.delete(node.id);
     }
-    if (doomed.size === 0) return;
+
+    // A selected connection is deleted on its own, without touching the blocks it
+    // joined. Unpicking one path is a different act from removing a step, and a
+    // builder that only offers the second one forces the operator to delete a
+    // block and rebuild it just to change where it leads.
+    const cutEdges = new Set(edges.filter((edge) => edge.selected).map((edge) => edge.id));
+
+    // Whichever the operator picked last wins outright. Deleting a connection
+    // must never also take a block that merely happened to be open in the panel.
+    if (cutEdges.size > 0) doomed.clear();
+
+    if (doomed.size === 0 && cutEdges.size === 0) return;
 
     snapshot();
-    setNodes((current) => current.filter((node) => !doomed.has(node.id)));
+    if (doomed.size > 0) setNodes((current) => current.filter((node) => !doomed.has(node.id)));
     setEdges((current) =>
-      current.filter((edge) => !doomed.has(edge.source) && !doomed.has(edge.target)),
+      current.filter(
+        (edge) =>
+          !cutEdges.has(edge.id) && !doomed.has(edge.source) && !doomed.has(edge.target),
+      ),
     );
     setSelectedId(null);
-  }, [nodes, selectedId, setNodes, setEdges, snapshot]);
+  }, [nodes, edges, selectedId, setNodes, setEdges, snapshot]);
 
   /**
    * Copies the selected blocks, and only the connections that run between them.
@@ -974,8 +988,8 @@ function Builder() {
         (node) =>
           (node.selected || node.id === selectedId) &&
           (node.data as FlowNodeData).nodeType !== 'trigger',
-      ),
-    [nodes, selectedId],
+      ) || edges.some((edge) => edge.selected),
+    [nodes, edges, selectedId],
   );
 
   // A flow with nothing but its trigger has not been started yet, so the canvas
@@ -1098,6 +1112,16 @@ function Builder() {
             onConnectStart={onConnectStart}
             onConnectEnd={onConnectEnd}
             onNodeClick={(_, node) => setSelectedId(node.id)}
+            // Picking a connection is picking something else: the block that was
+            // open in the panel stops being the selection.
+            onEdgeClick={() => {
+              setSelectedId(null);
+              setNodes((current) =>
+                current.some((node) => node.selected)
+                  ? current.map((node) => ({ ...node, selected: false }))
+                  : current,
+              );
+            }}
             onPaneClick={() => {
               setSelectedId(null);
               setPicker(null);
