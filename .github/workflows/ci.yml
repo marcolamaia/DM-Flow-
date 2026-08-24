@@ -85,9 +85,6 @@ jobs:
         # divergência que quebra o deploy.
         run: pnpm install --frozen-lockfile
 
-      - name: Preparar o banco
-        run: pnpm --filter @dmflow/db exec prisma migrate deploy
-
       - name: Compilar
         env:
           # Gravada dentro do site em tempo de compilação, não lida em
@@ -97,6 +94,17 @@ jobs:
           # DM_FLOW_REQUIRE_PUBLIC_API_URL.
           NEXT_PUBLIC_API_URL: http://localhost:4000
         run: pnpm build
+
+      # Exatamente o comando que a Heroku roda na fase de `release` — o mesmo
+      # nome de script, não uma versão aproximada. É esse detalhe que dá valor
+      # ao passo: se o release não deixar o banco pronto para a aplicação
+      # funcionar, a conferência fica vermelha aqui, e não no primeiro cliente.
+      #
+      # Escrito assim depois que a primeira execução desta conferência achou
+      # justamente isso: o release aplicava as migrations e não gravava os
+      # planos, e sem plano gratuito todo cadastro devolve 500.
+      - name: Preparar o banco, como no deploy
+        run: pnpm --filter @dmflow/db run release
 
       - name: Linter
         run: pnpm lint

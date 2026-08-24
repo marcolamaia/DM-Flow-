@@ -10,7 +10,7 @@ import { DmFlowExceptionFilter } from '../common/exception.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { StripeClient } from '../billing/stripe.client';
 import { loadEnv } from '../config/env';
-import { uuidv7 } from '@dmflow/shared';
+import { dayKey, uuidv7 } from '@dmflow/shared';
 
 let app: NestExpressApplication;
 let server: Server;
@@ -165,7 +165,9 @@ describe('cash movements', () => {
     });
     eventIds.push(...created.map((row) => row.id));
 
-    const today = new Date().toISOString().slice(0, 10);
+    // No fuso do relatório, não em UTC: entre 21h e a meia-noite de São Paulo
+    // o "hoje" de UTC já é o dia seguinte, onde nada aconteceu ainda.
+    const today = dayKey(new Date());
     const cashflow = await asBoss(
       `/admin/finance/cashflow?from=${today}&to=${today}`,
     ).expect(200);
@@ -186,9 +188,7 @@ describe('cash movements', () => {
     const to = new Date();
     const from = new Date(to.getTime() - 6 * 86_400_000);
     const cashflow = await asBoss(
-      `/admin/finance/cashflow?from=${from.toISOString().slice(0, 10)}&to=${to
-        .toISOString()
-        .slice(0, 10)}`,
+      `/admin/finance/cashflow?from=${dayKey(from)}&to=${dayKey(to)}`,
     ).expect(200);
 
     expect(cashflow.body.series.length).toBeGreaterThanOrEqual(7);

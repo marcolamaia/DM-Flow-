@@ -14,12 +14,13 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "deploy": "prisma migrate deploy",
+    "release": "prisma migrate deploy && node dist/seed-plans.js",
     "push": "prisma db push",
     "studio": "prisma studio",
     "seed": "node -r @swc-node/register prisma/seed.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "seed:plans": "node -r @swc-node/register prisma/seed-plans.ts"
+    "seed:plans": "node -r @swc-node/register src/seed-plans.ts"
   },
   "dependencies": {
     "@dmflow/shared": "workspace:*",

@@ -73,6 +73,15 @@ async function startAndPark(): Promise<string> {
   return started.executionId;
 }
 
+/**
+ * Apaga as execuções deste workspace entre um teste e outro.
+ *
+ * Os testes leem a execução pelo id que `startAndPark` devolve, e não pela
+ * primeira que o banco entregar: `findFirst` sem ordem não promete linha
+ * nenhuma em particular, e basta uma segunda execução aparecer — de um worker
+ * rodando ao lado contra o mesmo banco, por exemplo — para o teste ler a
+ * errada e falhar sem que exista defeito nenhum no produto.
+ */
 async function reset(): Promise<void> {
   await prisma.executionStep.deleteMany({ where: { workspaceId } });
   await prisma.execution.deleteMany({ where: { workspaceId } });
@@ -203,21 +212,21 @@ describe('waiting for a reply', () => {
 
   it('matches regardless of accents and capitals', async () => {
     await reset();
-    await startAndPark();
+    const executionId = await startAndPark();
 
     await engine.deliverReply({ workspaceId, conversationId, text: 'NAO' });
 
-    const execution = await prisma.execution.findFirst({ where: { workspaceId } });
+    const execution = await prisma.execution.findUnique({ where: { id: executionId } });
     expect((execution!.variables as Record<string, unknown>).reply).toMatchObject({ option: 'no' });
   }, 30_000);
 
   it('sends an unrecognised answer down the catch-all path', async () => {
     await reset();
-    await startAndPark();
+    const executionId = await startAndPark();
 
     await engine.deliverReply({ workspaceId, conversationId, text: 'que horas abre?' });
 
-    const execution = await prisma.execution.findFirst({ where: { workspaceId } });
+    const execution = await prisma.execution.findUnique({ where: { id: executionId } });
     expect((execution!.variables as Record<string, unknown>).reply).toMatchObject({ option: 'any' });
   }, 30_000);
 
@@ -235,7 +244,7 @@ describe('waiting for a reply', () => {
     });
 
     await reset();
-    await startAndPark();
+    const executionId = await startAndPark();
     await engine.deliverReply({
       workspaceId,
       conversationId,
@@ -243,7 +252,7 @@ describe('waiting for a reply', () => {
       quickReplyPayload: 'btn_quero',
     });
 
-    const execution = await prisma.execution.findFirst({ where: { workspaceId } });
+    const execution = await prisma.execution.findUnique({ where: { id: executionId } });
     expect((execution!.variables as Record<string, unknown>).reply).toMatchObject({ option: 'yes' });
 
     await prisma.automationVersion.update({

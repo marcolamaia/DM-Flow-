@@ -111,7 +111,14 @@ export default tseslint.config(
 
   // Scripts e ferramentas: existem para falar com quem os roda.
   {
-    files: ['scripts/**/*.{mjs,js,ts}', '**/scripts/**/*.{mjs,js,ts}', '**/prisma/**/*.ts'],
+    files: [
+      'scripts/**/*.{mjs,js,ts}',
+      '**/scripts/**/*.{mjs,js,ts}',
+      '**/prisma/**/*.ts',
+      // Os seeds rodam na fase de release do deploy: o que eles escrevem no
+      // console é o único relato de que gravaram o que deviam.
+      '**/seed*.ts',
+    ],
     rules: {
       'no-console': 'off',
     },

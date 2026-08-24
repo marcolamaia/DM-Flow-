@@ -11,7 +11,7 @@ import { AppModule } from '../app.module';
 import { DmFlowExceptionFilter } from '../common/exception.filter';
 import { PrismaService } from '../prisma/prisma.service';
 import { loadEnv } from '../config/env';
-import { uuidv7 } from '@dmflow/shared';
+import { dayKey, uuidv7 } from '@dmflow/shared';
 
 let app: NestExpressApplication;
 let server: Server;
@@ -28,6 +28,22 @@ const eventIds: string[] = [];
 const runPrefix = `${1 + Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 256)}`;
 let addressCounter = 0;
 const freshAddress = () => `10.${runPrefix}.${(addressCounter += 1)}`;
+
+/**
+ * O dia de hoje no fuso do relatório, e não em UTC.
+ *
+ * `new Date().toISOString().slice(0, 10)` devolve o dia em UTC. As métricas são
+ * agrupadas em America/Sao_Paulo, três horas atrás. Entre 21h e a meia-noite de
+ * São Paulo os dois discordam, e um teste que pedia o "hoje" de UTC pedia o dia
+ * seguinte — janela onde nada tinha acontecido ainda, resultado zero,
+ * verificação vermelha.
+ *
+ * Era vermelho três horas por dia, todo dia. Um teste assim ensina a tratar
+ * falha como chateação em vez de aviso, e é assim que uma conferência
+ * automática deixa de valer alguma coisa.
+ */
+const hojeNoRelatorio = () => dayKey(new Date());
+
 
 async function signUp(name: string): Promise<string> {
   const response = await request(server)
@@ -195,7 +211,7 @@ describe('recurring revenue', () => {
 
 describe('what moved over a period', () => {
   it('counts a signup that actually happened in the window', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeNoRelatorio();
     const response = await request(server)
       .get(`/admin/metrics/growth?from=${today}&to=${today}`)
       .set('Cookie', bossCookie)
@@ -223,7 +239,7 @@ describe('what moved over a period', () => {
     });
     eventIds.push(cancelled.id);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeNoRelatorio();
     const response = await request(server)
       .get(`/admin/metrics/growth?from=${today}&to=${today}`)
       .set('Cookie', bossCookie)
@@ -235,7 +251,7 @@ describe('what moved over a period', () => {
   });
 
   it('marks a churn rate computed from too few accounts as unreliable', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeNoRelatorio();
     const response = await request(server)
       .get(`/admin/metrics/growth?from=${today}&to=${today}`)
       .set('Cookie', bossCookie)
@@ -249,7 +265,7 @@ describe('what moved over a period', () => {
   });
 
   it('does not report an LTV it cannot stand behind', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = hojeNoRelatorio();
     const response = await request(server)
       .get(`/admin/metrics/growth?from=${today}&to=${today}`)
       .set('Cookie', bossCookie)
@@ -269,9 +285,7 @@ describe('a series has no invisible gaps', () => {
 
     const response = await request(server)
       .get(
-        `/admin/metrics/series?event=user.registered&from=${from.toISOString().slice(0, 10)}&to=${to
-          .toISOString()
-          .slice(0, 10)}`,
+        `/admin/metrics/series?event=user.registered&from=${dayKey(from)}&to=${dayKey(to)}`,
       )
       .set('Cookie', bossCookie)
       .set('X-Forwarded-For', freshAddress())
@@ -373,6 +387,50 @@ describe('one definition, everywhere', () => {
     walk(root);
 
     expect(offenders).toEqual([]);
+  });
+
+  it('has no date built in UTC where the reporting timezone is what counts', () => {
+    // Este teste existe porque dois testes ficavam vermelhos das 21h à
+    // meia-noite de São Paulo, todo dia, e verdes nas outras 21 horas.
+    //
+    // `new Date().toISOString().slice(0, 10)` é o dia em UTC. As métricas são
+    // agrupadas em America/Sao_Paulo. Nas três horas em que os dois discordam,
+    // pedir o "hoje" de UTC é pedir o dia seguinte — janela vazia, resultado
+    // zero, falha que não é defeito nenhum do produto.
+    //
+    // Uma conferência que fica vermelha sozinha ensina a ignorar vermelho. É
+    // por isso que isto quebra o build em vez de virar um comentário.
+    const root = join(__dirname, '..', '..');
+    const offenders: string[] = [];
+
+    const walk = (dir: string) => {
+      for (const entry of readdirSync(dir)) {
+        if (entry === 'node_modules' || entry === 'dist') continue;
+        const path = join(dir, entry);
+        if (statSync(path).isDirectory()) {
+          walk(path);
+          continue;
+        }
+        if (!entry.endsWith('.ts')) continue;
+
+        readFileSync(path, 'utf8')
+          .split('\n')
+          .forEach((line, index) => {
+            const trimmed = line.trimStart();
+            // Comentários falam sobre o problema; é o código que o comete.
+            if (trimmed.startsWith('//') || trimmed.startsWith('*')) return;
+            // Uma data recortada de um ISO — que é sempre UTC — usada como dia.
+            if (/toISOString\(\)[\s\S]{0,20}\.slice\(0,\s*(?:7|10)\)/.test(line)) {
+              offenders.push(`${path.slice(root.length + 1)}:${index + 1}`);
+            }
+          });
+      }
+    };
+    walk(root);
+
+    // dayKey e monthKey são a forma certa, e são justamente onde este recorte
+    // é legítimo: lá o instante já foi deslocado para o fuso do relatório.
+    expect(offenders.filter((o) => !o.includes('metrics.ts'))).toEqual([]);
   });
 
   it('reads that definition from the shared package, not from a local copy', () => {

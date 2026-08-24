@@ -135,8 +135,8 @@ O que ela faz, em ordem:
 | Passo | O que verifica | O que impede |
 |---|---|---|
 | Instalar | Que `pnpm-lock.yaml` bate com os `package.json` | Que a máquina do deploy instale versões diferentes das testadas |
-| Preparar o banco | Que as migrations rodam do zero | Um deploy que morre no `release` por migration quebrada |
 | Compilar | Que os quatro pacotes compilam | Código que só quebra na hora de publicar |
+| Preparar o banco | Roda **o mesmo comando de `release` da Heroku**, num banco vazio | Um deploy que morre no `release`, ou que sobe deixando o banco sem o que a aplicação precisa |
 | Linter | Erros que o compilador não vê | `await` esquecido, variável morta, efeito com dependência faltando |
 | Tipos | TypeScript estrito nos quatro pacotes | Campo renomeado num lugar e não no outro |
 | Testes | Os testes do domínio, os da API contra Postgres e Redis **de verdade**, e a paridade das traduções | Cadastro, cobrança, isolamento entre clientes ou tradução quebrados |
@@ -173,7 +173,7 @@ pnpm install
 heroku-postbuild  →  pnpm build
    │                 (shared → db → api → web)
    ▼
-release: prisma migrate deploy      ← SÓ NO APP DA API
+release: migrate deploy + gravar os planos   ← SÓ NO APP DA API
    │
    │  Se falhar, o deploy é CANCELADO e a versão antiga continua no ar.
    │  É exatamente o que se quer: subir código que espera uma coluna
@@ -182,8 +182,19 @@ release: prisma migrate deploy      ← SÓ NO APP DA API
 web e worker sobem
 ```
 
+**São duas coisas no `release`, não uma.** As migrations criam as tabelas; o
+segundo comando grava os planos. Sem a linha do plano gratuito no banco,
+`/auth/register` não tem o que assinar e **todo cadastro devolve 500** — numa
+instalação nova, o primeiro cliente bateria exatamente nisso.
+
+Isso não é teoria: era o estado real até a primeira execução da conferência
+automática, que ficou vermelha por esse motivo. As duas etapas são idempotentes
+(o seed é `upsert`) e rodam a cada deploy.
+
 O comando de `release` foi rodado exatamente como está escrito no `Procfile`,
-contra um banco real, antes de eu documentar isso.
+contra um banco criado vazio: 5 migrations aplicadas, 4 planos gravados, e um
+cadastro respondeu 201. Apagando os planos do mesmo banco, o mesmo cadastro
+voltou a responder 500 — que é a prova de que era isto.
 
 ---
 
@@ -240,7 +251,8 @@ e não vou criar uma no seu nome.
 
 O que **foi** verificado, aqui, contra serviços reais:
 
-- O comando de `release` (`prisma migrate deploy`) roda e encontra as 5 migrations
+- O comando de `release` completo roda num banco vazio: aplica as 5 migrations,
+  grava os 4 planos, e um cadastro passa a funcionar
 - O `prisma` saiu de devDependencies para dependencies — sem isso a Heroku o
   removeria depois do build e **todo deploy morreria no release**
 - A API passou a respeitar `PORT`. Sem isso o dyno seria morto por timeout em 60
