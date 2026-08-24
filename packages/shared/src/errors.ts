@@ -122,6 +122,53 @@ export const ERROR_CATALOG = {
     },
   },
 
+  EMAIL_CHANGE_SAME_ADDRESS: {
+    code: 'EMAIL_CHANGE_SAME_ADDRESS',
+    category: 'VALIDATION',
+    httpStatus: 422,
+    retryable: false,
+    message: {
+      'pt-BR': 'Este já é o e-mail da sua conta.',
+      en: 'That is already the email on your account.',
+    },
+  },
+
+  EMAIL_CHANGE_TOKEN_INVALID: {
+    code: 'EMAIL_CHANGE_TOKEN_INVALID',
+    category: 'AUTH',
+    httpStatus: 400,
+    retryable: false,
+    message: {
+      'pt-BR':
+        'Este link de troca de e-mail é inválido, expirou ou já foi usado. Peça a troca de novo.',
+      en: 'This email-change link is invalid, expired or already used. Request the change again.',
+    },
+  },
+
+  ACCOUNT_DELETE_LAST_OWNER: {
+    code: 'ACCOUNT_DELETE_LAST_OWNER',
+    category: 'CONFLICT',
+    httpStatus: 409,
+    retryable: false,
+    message: {
+      'pt-BR':
+        'Você é o único proprietário de uma área de trabalho que tem outras pessoas. Transfira a propriedade ou remova as pessoas antes de excluir sua conta.',
+      en: 'You are the only owner of a workspace that still has other people in it. Transfer ownership or remove them before deleting your account.',
+    },
+  },
+
+  ACCOUNT_DELETE_ACTIVE_SUBSCRIPTION: {
+    code: 'ACCOUNT_DELETE_ACTIVE_SUBSCRIPTION',
+    category: 'CONFLICT',
+    httpStatus: 409,
+    retryable: false,
+    message: {
+      'pt-BR':
+        'Existe uma assinatura paga ativa. Cancele a assinatura antes de excluir a conta, para não continuar sendo cobrado.',
+      en: 'There is an active paid subscription. Cancel it before deleting the account, so you are not charged again.',
+    },
+  },
+
   EMAIL_NOT_VERIFIED: {
     code: 'EMAIL_NOT_VERIFIED',
     category: 'AUTH',

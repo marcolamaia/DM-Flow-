@@ -90,6 +90,12 @@ const JUSTIFIED_SYSTEM_QUERIES: Array<{ file: string; model: string; operation: 
     why: 'Lists the workspaces the authenticated user belongs to, scoped by their own userId — which is exactly what the answer is about.',
   },
   {
+    file: 'src/account/account.service.ts',
+    model: 'workspaceMember',
+    operation: 'findMany',
+    why: "Deleting an account has to look across every workspace the person belongs to — that is the question being asked, and a per-workspace filter would answer a different one and let somebody delete their account while still being the last owner of a workspace the filter hid. Scoped by the authenticated user's own userId, and what comes back is counts and names for the confirmation screen, never another tenant's records.",
+  },
+  {
     file: 'src/automations/automations.service.ts',
     model: 'trigger',
     operation: 'updateMany',

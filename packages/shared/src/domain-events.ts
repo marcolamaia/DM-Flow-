@@ -15,6 +15,7 @@ export const DOMAIN_EVENTS = [
   // Identity
   'user.registered',
   'user.email_verified',
+  'user.email_changed',
   'user.logged_in',
   'user.login_failed',
   'user.password_reset_requested',

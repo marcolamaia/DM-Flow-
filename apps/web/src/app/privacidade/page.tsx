@@ -128,11 +128,23 @@ export default function PrivacidadePage() {
           <li>Portabilidade</li>
           <li>Informação sobre com quem compartilhamos</li>
         </ul>
+        <p>
+          <strong>Exclusão você já faz sozinho.</strong> Em Configurações › Segurança existe o
+          botão de excluir a conta. Ele apaga na hora — sem período de arrependimento, sem cópia
+          guardada para restaurar. A tela mostra antes exatamente o que vai ser apagado, com
+          números, e recusa a exclusão se você for o único proprietário de uma área de trabalho
+          com outras pessoas dentro (apagar levaria junto o trabalho delas) ou se houver
+          assinatura paga ativa (você continuaria sendo cobrado).
+        </p>
+        <p>
+          <strong>Trocar o e-mail</strong> também está na mesma tela. A troca só vale depois que
+          você confirma pelo link enviado ao endereço novo, e o endereço antigo recebe um aviso na
+          hora do pedido — é assim que uma conta invadida não é tomada em silêncio.
+        </p>
         <p className="rounded-lg border border-warning/40 bg-warning/5 p-3 text-[14px]">
-          <strong>Aviso honesto sobre o estado atual:</strong> ainda não existe um botão na
-          plataforma para exercer esses direitos sozinho. Hoje o pedido é feito por e-mail para{' '}
-          <Preencher>E-MAIL DE CONTATO</Preencher> e atendido manualmente, dentro do prazo legal.
-          A tela para fazer isso sem depender de nós está no plano de trabalho.
+          <strong>Aviso honesto sobre o estado atual:</strong> acesso, correção e portabilidade
+          ainda não têm botão próprio. Hoje esses três são pedidos por e-mail para{' '}
+          <Preencher>E-MAIL DE CONTATO</Preencher> e atendidos manualmente, dentro do prazo legal.
         </p>
         <p>
           Se você é <strong>contato de um cliente</strong> nosso e quer exercer seus direitos, fale

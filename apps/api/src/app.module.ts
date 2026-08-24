@@ -5,6 +5,7 @@ import { CommonModule } from './common/common.module';
 import { MailModule } from './mail/mail.module';
 import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
+import { AccountModule } from './account/account.module';
 import { BillingModule } from './billing/billing.module';
 import { WorkspaceModule } from './workspace/workspace.module';
 import { ContactsModule } from './contacts/contacts.module';
@@ -23,7 +24,7 @@ import { CorrelationMiddleware } from './common/correlation.middleware';
 import { RateLimitMiddleware } from './common/rate-limit.middleware';
 
 @Module({
-  imports: [PrismaModule, RedisModule, CommonModule, MailModule, AdminModule, BillingModule, AuthModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
+  imports: [PrismaModule, RedisModule, CommonModule, MailModule, AdminModule, BillingModule, AuthModule, AccountModule, WorkspaceModule, ContactsModule, CapabilityModule, ProvidersModule, ChannelsModule, AutomationsModule, EngineModule, IngestionModule, ExecutionsModule, InboxModule, AnalyticsModule, IntegrationsModule],
   controllers: [HealthController],
 })
 export class AppModule implements NestModule {

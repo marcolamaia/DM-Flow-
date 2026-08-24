@@ -19,6 +19,8 @@ import {
   Field,
   Input,
 } from '@/components/ui/primitives';
+import { EmailCard } from '@/components/settings/email-card';
+import { DeleteAccountCard } from '@/components/settings/delete-account-card';
 import type { Me } from '@/lib/types';
 
 /**
@@ -42,8 +44,11 @@ export default function SecurityPage() {
       <PageHeader title={t('security.title')} subtitle={t('security.subtitle')} />
 
       <div className="max-w-2xl space-y-5 px-7 py-5">
+        {me.data ? <EmailCard currentEmail={me.data.user.email} errorOf={errorOf} /> : null}
         <PasswordCard errorOf={errorOf} onChanged={() => router.replace('/login')} />
         <TotpCard enabled={me.data?.user.totpEnabled ?? false} errorOf={errorOf} />
+        {/* Por último e separado: é a única ação desta tela que não tem desfazer. */}
+        {me.data ? <DeleteAccountCard currentEmail={me.data.user.email} errorOf={errorOf} /> : null}
       </div>
     </>
   );

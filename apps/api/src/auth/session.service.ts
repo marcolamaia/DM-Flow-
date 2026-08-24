@@ -122,7 +122,12 @@ export class SessionService {
     });
   }
 
-  private clearCookie(res: Response): void {
+  /**
+   * Público porque a exclusão de conta também precisa apagar o cookie, e ela
+   * não passa por `revoke`: não há mais sessão para revogar depois que a linha
+   * do usuário deixou de existir.
+   */
+  clearCookie(res: Response): void {
     res.clearCookie(SESSION_COOKIE, { path: '/' });
   }
 }

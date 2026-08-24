@@ -50,7 +50,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 | Trocar a própria senha | **PRONTO** | Tela em /settings/security, testada em navegador |
 | Segundo fator (TOTP) | **PRONTO** | Ativar com QR, confirmar e desativar; verificado gerando código real |
 | Sessões visíveis e revogação | **NÃO INICIADO** | Fila #38 |
-| Trocar e-mail, excluir conta | **NÃO INICIADO** | Fila #39 |
+| Trocar e-mail, excluir conta | **PRONTO** | Troca em duas etapas com aviso ao endereço antigo; exclusão real, com prévia numérica e recusa quando é o último dono ou há cobrança ativa. 24 testes + 28 no navegador |
 | **Login com Google** | **BLOQUEADO** | Precisa de `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` |
 
 ## Produto
@@ -109,7 +109,7 @@ Legenda: **PRONTO** · **ANDAMENTO** · **BLOQUEADO** · **NÃO INICIADO**
 
 | Módulo | Estado | O que falta |
 |---|---|---|
-| Testes | **ANDAMENTO** | 222 testes + 109 no navegador, em 7 baterias. Falta cobrir inbox |
+| Testes | **ANDAMENTO** | 247 testes + 137 no navegador, em 8 baterias. Falta cobrir inbox |
 | Limite de requisições | **PRONTO** | — |
 | Logs estruturados | **PRONTO** | Nunca registram senha nem token |
 | Trilha de auditoria | **PRONTO** | Só leitura, sem rota que edite |

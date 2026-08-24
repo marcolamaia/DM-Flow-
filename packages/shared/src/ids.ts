@@ -36,3 +36,30 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
 }
+
+/**
+ * Um endereço de e-mail reduzido ao que dá para reconhecer sem entregar o resto.
+ *
+ * `marcos@exemplo.com` vira `m****s@exemplo.com`.
+ *
+ * Serve para uma situação específica: avisar o dono de uma conta que pediram
+ * para mover o e-mail dela para outro endereço. Ele precisa de informação
+ * suficiente para reconhecer ("isso é meu e-mail novo, fui eu") ou estranhar
+ * ("não conheço isso"), sem que a mensagem entregue de bandeja um endereço
+ * válido para quem interceptar a caixa.
+ *
+ * O domínio fica inteiro de propósito: é ele que denuncia o golpe.
+ */
+export function maskEmail(email: string): string {
+  const at = email.lastIndexOf('@');
+  if (at <= 0) return '***';
+
+  const local = email.slice(0, at);
+  const domain = email.slice(at);
+
+  // Nomes de uma ou duas letras não têm meio para esconder; some com tudo em vez
+  // de devolver o endereço quase inteiro.
+  if (local.length <= 2) return `${'*'.repeat(local.length)}${domain}`;
+
+  return `${local[0]}${'*'.repeat(Math.min(local.length - 2, 6))}${local[local.length - 1]}${domain}`;
+}

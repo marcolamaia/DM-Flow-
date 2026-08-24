@@ -198,6 +198,7 @@ model User {
   notes         ConversationNote[]
   passwordResets PasswordResetToken[]
   emailVerifications EmailVerificationToken[]
+  emailChanges   EmailChangeRequest[]
   platformAdmin      PlatformAdmin?  @relation("PlatformAdminUser")
   platformGrants     PlatformAdmin[] @relation("PlatformAdminGrantedBy")
 
@@ -236,6 +237,30 @@ model PasswordResetToken {
 /// Proves the person signing up can read the address they claimed. Stored as a
 /// hash like every other opaque token, so a database dump does not hand out
 /// working verification links.
+/// Uma troca de e-mail pedida e ainda não confirmada.
+///
+/// A troca não acontece no pedido. O endereço só muda quando alguém prova ter
+/// acesso à caixa NOVA — senão bastaria uma sessão roubada para trocar o e-mail
+/// e trancar o dono para fora da própria conta.
+model EmailChangeRequest {
+  id         String    @id
+  userId     String
+  /// Já normalizado (minúsculas, sem espaços), igual ao que vai virar User.email.
+  newEmail   String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  /// Preenchido quando o dono cancela, ou quando a senha muda: uma troca pedida
+  /// por quem invadiu morre junto com a senha que ele usou.
+  canceledAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 model EmailVerificationToken {
   id        String    @id
   userId    String
@@ -571,13 +596,18 @@ model ConversationNote {
   id             String   @id
   workspaceId    String
   conversationId String
-  authorUserId   String
+  /// Nulo quando quem escreveu excluiu a própria conta.
+  ///
+  /// A anotação é do time, não da pessoa: "cliente irritado, não oferecer
+  /// upgrade" continua valendo depois que o atendente foi embora. Com Cascade,
+  /// uma pessoa saindo levava junto o histórico de trabalho de todo mundo.
+  authorUserId   String?
   body           String
   createdAt      DateTime @default(now())
 
   workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  author       User         @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  author       User?        @relation(fields: [authorUserId], references: [id], onDelete: SetNull)
 
   @@index([conversationId, createdAt(sort: Desc)])
 }

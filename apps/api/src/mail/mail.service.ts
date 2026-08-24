@@ -4,6 +4,9 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from '@dmflow/shared';
 import { loadEnv } from '../config/env';
 import { logger } from '../common/logger';
 import {
+  renderAccountDeleted,
+  renderEmailChangeConfirmation,
+  renderEmailChangeNotice,
   renderEmailVerification,
   renderInvitation,
   renderPasswordReset,
@@ -119,6 +122,48 @@ export class MailService implements OnModuleDestroy {
         expiresHours: options.expiresHours,
       }),
     );
+  }
+
+  /** Ao endereço NOVO. O único com link. */
+  sendEmailChangeConfirmation(options: {
+    to: string;
+    currentEmail: string;
+    locale: string | null | undefined;
+    token: string;
+    expiresHours: number;
+  }): Promise<SendResult> {
+    const url = this.webUrl('/confirm-email-change', options.token);
+    return this.send(
+      options.to,
+      renderEmailChangeConfirmation({
+        locale: toLocale(options.locale),
+        currentEmail: options.currentEmail,
+        url,
+        expiresHours: options.expiresHours,
+      }),
+    );
+  }
+
+  /** Ao endereço ANTIGO. Sem link — ver o comentário no template. */
+  sendEmailChangeNotice(options: {
+    to: string;
+    locale: string | null | undefined;
+    maskedNewEmail: string;
+  }): Promise<SendResult> {
+    return this.send(
+      options.to,
+      renderEmailChangeNotice({
+        locale: toLocale(options.locale),
+        maskedNewEmail: options.maskedNewEmail,
+      }),
+    );
+  }
+
+  sendAccountDeleted(options: {
+    to: string;
+    locale: string | null | undefined;
+  }): Promise<SendResult> {
+    return this.send(options.to, renderAccountDeleted({ locale: toLocale(options.locale) }));
   }
 
   sendInvitation(options: {

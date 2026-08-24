@@ -309,6 +309,16 @@ export class AuthService {
         where: { id: record.id },
         data: { usedAt: new Date() },
       }),
+      // Uma troca de e-mail em aberto morre aqui.
+      //
+      // O roteiro que isto corta: alguém entra na conta, pede a troca do e-mail
+      // para um endereço dele, e espera. O dono percebe, redefine a senha — e
+      // sem esta linha o link de troca continuaria válido na caixa do invasor,
+      // pronto para tomar a conta depois que a poeira baixasse.
+      this.prisma.emailChangeRequest.updateMany({
+        where: { userId: record.userId, usedAt: null, canceledAt: null },
+        data: { canceledAt: new Date() },
+      }),
     ]);
 
     // A password change invalidates every existing session, everywhere.
@@ -322,10 +332,17 @@ export class AuthService {
     const valid = await argon2.verify(user.passwordHash, current).catch(() => false);
     if (!valid) throw new DmFlowError('INVALID_CREDENTIALS');
 
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: { passwordHash: await argon2.hash(next, ARGON_OPTIONS) },
-    });
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { passwordHash: await argon2.hash(next, ARGON_OPTIONS) },
+      }),
+      // Pelo mesmo motivo do reset: ver o comentário em resetPassword.
+      this.prisma.emailChangeRequest.updateMany({
+        where: { userId, usedAt: null, canceledAt: null },
+        data: { canceledAt: new Date() },
+      }),
+    ]);
     await this.sessions.revokeAllForUser(userId);
   }
 
