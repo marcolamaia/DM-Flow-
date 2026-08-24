@@ -87,12 +87,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Compilar
-        # Limite por passo, e não só no trabalho inteiro.
+        # Limite por passo, e não só no trabalho inteiro: um trabalho que morre
+        # no limite geral não diz onde travou; um passo que morre no limite
+        # dele diz.
         #
-        # A segunda execução desta conferência ficou pendurada aqui por mais de
-        # 40 minutos — mais que o limite do trabalho — com o registro congelado
-        # no mesmo minuto em que começou. Um trabalho que morre no limite geral
-        # não diz onde travou; um passo que morre no limite dele diz.
+        # Os números vêm do que as execuções reais gastaram — este passo levou
+        # 46 segundos — com folga larga por cima, para nunca cortar uma
+        # execução honesta só porque a máquina estava lenta.
         timeout-minutes: 12
         env:
           # Gravada dentro do site em tempo de compilação, não lida em
