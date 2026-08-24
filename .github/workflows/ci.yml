@@ -80,12 +80,20 @@ jobs:
           cache: pnpm
 
       - name: Instalar dependências
+        timeout-minutes: 8
         # --frozen-lockfile: se o pnpm-lock.yaml não bater com o package.json, a
         # execução para. Instalar "o que der" esconde exatamente o tipo de
         # divergência que quebra o deploy.
         run: pnpm install --frozen-lockfile
 
       - name: Compilar
+        # Limite por passo, e não só no trabalho inteiro.
+        #
+        # A segunda execução desta conferência ficou pendurada aqui por mais de
+        # 40 minutos — mais que o limite do trabalho — com o registro congelado
+        # no mesmo minuto em que começou. Um trabalho que morre no limite geral
+        # não diz onde travou; um passo que morre no limite dele diz.
+        timeout-minutes: 12
         env:
           # Gravada dentro do site em tempo de compilação, não lida em
           # execução. Em produção é o endereço real da API; aqui é localhost
@@ -104,15 +112,19 @@ jobs:
       # justamente isso: o release aplicava as migrations e não gravava os
       # planos, e sem plano gratuito todo cadastro devolve 500.
       - name: Preparar o banco, como no deploy
+        timeout-minutes: 5
         run: pnpm --filter @dmflow/db run release
 
       - name: Linter
+        timeout-minutes: 6
         run: pnpm lint
 
       - name: Tipos
+        timeout-minutes: 6
         run: pnpm typecheck
 
       - name: Testes
+        timeout-minutes: 12
         # Um comando só: os testes do pacote de domínio, os da API contra banco
         # e Redis reais, e a conferência de que pt-BR e inglês têm as mesmas
         # chaves de tradução.
